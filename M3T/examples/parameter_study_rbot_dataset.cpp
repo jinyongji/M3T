@@ -5,8 +5,9 @@
 
 int main() {
   // Directories
-  std::filesystem::path dataset_directory{"/your/path/"};
-  std::filesystem::path external_directory{"/your/path/"};
+  std::filesystem::path dataset_directory{R"(D:\datasets\RBOT_dataset)"};
+  std::filesystem::path external_directory{
+      L"D:\\workspace\\_cpp\\3DObjectTracking\\\u4e2d\u95f4\u7ed3\u679c\u6587\u4ef6\\RBOT"};
 
   // Dataset configuration
   std::vector<std::string> body_names{

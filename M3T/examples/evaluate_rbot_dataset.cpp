@@ -3,11 +3,14 @@
 
 #include "rbot_evaluator.h"
 
-int main() {
+#include <algorithm>
+
+int main(int argc, char *argv[]) {
   // Directories
-  std::filesystem::path dataset_directory{"/your/path/"};
-  std::filesystem::path external_directory{"/your/path/"};
-  std::filesystem::path result_directory{"/your/path/"};
+  std::filesystem::path dataset_directory{R"(D:\datasets\RBOT_dataset)"};
+  std::filesystem::path external_directory{
+      L"D:\\workspace\\_cpp\\3DObjectTracking\\\u4e2d\u95f4\u7ed3\u679c\u6587\u4ef6\\RBOT"};
+  std::filesystem::path result_directory{external_directory / "results"};
 
   // Dataset configuration
   std::vector<std::string> body_names{
@@ -18,6 +21,50 @@ int main() {
   std::vector<std::string> sequence_names{
       "a_regular", "b_dynamiclight", "c_noisy", "d_occlusion", "d_occlusion"};
   std::vector<bool> sequence_occlusions{false, false, false, false, true};
+
+  // Optional command line selection. With no arguments, evaluate the complete
+  // benchmark. Example: evaluate_rbot_dataset ape a_regular visualize
+  if (argc > 4) {
+    std::cerr << "Usage: evaluate_rbot_dataset [body|all] "
+                 "[a_regular|b_dynamiclight|c_noisy|d_occlusion|"
+                 "d_occlusion_modeled|all] [visualize]"
+              << std::endl;
+    return 1;
+  }
+  if (argc >= 2 && std::string{argv[1]} != "all") {
+    const std::string selected_body{argv[1]};
+    if (std::find(body_names.begin(), body_names.end(), selected_body) ==
+        body_names.end()) {
+      std::cerr << "Unknown RBOT body: " << selected_body << std::endl;
+      return 1;
+    }
+    body_names = {selected_body};
+  }
+  if (argc >= 3 && std::string{argv[2]} != "all") {
+    const std::string selected_sequence{argv[2]};
+    const bool modeled_occlusion{selected_sequence == "d_occlusion_modeled"};
+    const std::string sequence_name{
+        modeled_occlusion ? "d_occlusion" : selected_sequence};
+    const std::vector<std::string> valid_sequence_names{
+        "a_regular", "b_dynamiclight", "c_noisy", "d_occlusion"};
+    if (std::find(valid_sequence_names.begin(), valid_sequence_names.end(),
+                  sequence_name) == valid_sequence_names.end()) {
+      std::cerr << "Unknown RBOT sequence: " << selected_sequence << std::endl;
+      return 1;
+    }
+    sequence_names = {sequence_name};
+    sequence_occlusions = {modeled_occlusion};
+  }
+  bool visualize{false};
+  if (argc == 4) {
+    if (std::string{argv[3]} != "visualize") {
+      std::cerr << "Unknown option: " << argv[3] << std::endl;
+      return 1;
+    }
+    visualize = true;
+  }
+
+  std::filesystem::create_directories(result_directory);
 
   // Run experiments
   RBOTEvaluator evaluator{"evaluator", dataset_directory, external_directory,
@@ -81,12 +128,12 @@ int main() {
     t->set_n_update_iterations(2);
     t->set_n_corr_iterations(7);
   });
-  evaluator.set_run_sequentially(true);
-  evaluator.set_visualize_all_results(false);
+  evaluator.set_run_sequentially(false);
+  evaluator.set_visualize_all_results(visualize);
   evaluator.set_use_region_modality(true);
   evaluator.set_use_texture_modality(true);
   evaluator.SaveResults(result_directory);
-  evaluator.SetUp();
-  evaluator.Evaluate();
+  if (!evaluator.SetUp()) return 1;
+  if (!evaluator.Evaluate()) return 1;
   return 0;
 }

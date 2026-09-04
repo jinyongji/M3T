@@ -13,3 +13,5 @@ doc/html
 !CMakeLists.txt
 !readme.md
 !.clang-format
+!run_rbot_parallel.ps1
+!RBOT_RUN_GUIDE.md
