@@ -2,6 +2,16 @@ cmake_minimum_required(VERSION 3.5)
 
 add_executable(evaluate_rbot_dataset evaluate_rbot_dataset.cpp rbot_evaluator.cpp rbot_evaluator.h)
 target_link_libraries(evaluate_rbot_dataset PUBLIC m3t)
+if (USE_ONNXRUNTIME)
+    foreach (ONNXRUNTIME_DLL onnxruntime.dll
+                             onnxruntime_providers_shared.dll
+                             onnxruntime_providers_cuda.dll)
+        add_custom_command(TARGET evaluate_rbot_dataset POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${ONNXRUNTIME_DIR}/lib/${ONNXRUNTIME_DLL}"
+                        "$<TARGET_FILE_DIR:evaluate_rbot_dataset>")
+    endforeach ()
+endif ()
 
 add_executable(parameter_study_rbot_dataset parameter_study_rbot_dataset.cpp rbot_evaluator.cpp rbot_evaluator.h)
 target_link_libraries(parameter_study_rbot_dataset PUBLIC m3t)

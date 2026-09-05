@@ -22,7 +22,9 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <array>
+#include <deque>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -55,12 +57,65 @@ class RBOTEvaluator {
     float calculate_results = 0.0f;
   };
 
+  struct ModalityDiagnostics {
+    int n_correspondences = 0;
+    int n_gradient_terms = 0;
+    float residual_mean = 0.0f;
+    float inlier_fraction = 0.0f;
+    float auxiliary_mean = 0.0f;
+    float normalized_gradient_norm = 0.0f;
+    float normalized_information_trace = 0.0f;
+    float normalized_information_min_eigenvalue = 0.0f;
+    float normalized_information_max_eigenvalue = 0.0f;
+    float normalized_information_condition = 0.0f;
+    float step_rotation_norm = 0.0f;
+    float step_translation_norm = 0.0f;
+    Eigen::Matrix<float, 6, 1> regularized_step =
+        Eigen::Matrix<float, 6, 1>::Zero();
+  };
+
+  struct FusionDiagnostics {
+    ModalityDiagnostics region;
+    ModalityDiagnostics texture;
+    float step_cosine = 0.0f;
+    float regularized_step_disagreement = 0.0f;
+    int model_texture_correspondences = 0;
+    float model_texture_residual_mean = 0.0f;
+    float model_texture_reliability_weight = 0.0f;
+    int model_photometric_points = 0;
+    float model_photometric_residual_mean = 0.0f;
+    float model_photometric_reliability_weight = 0.0f;
+    int model_contour_points = 0;
+    float model_contour_residual_mean = 0.0f;
+    float model_contour_reliability_weight = 0.0f;
+    int model_ecc_points = 0;
+    float model_ecc_residual_mean = 0.0f;
+    float model_ecc_correlation = 0.0f;
+    float model_ecc_reliability_weight = 0.0f;
+    float model_hypothesis_confidence = 0.0f;
+    float model_hypothesis_reliability_weight = 0.0f;
+    int video_ecc_points = 0;
+    float video_ecc_residual_mean = 0.0f;
+    float video_ecc_correlation = 0.0f;
+    float video_ecc_reliability_weight = 0.0f;
+    bool selective_recovery = false;
+    float dual_hypothesis_log_odds = 0.0f;
+    bool dual_hypothesis_selected_disk = false;
+    float dual_hypothesis_disk_success = 0.0f;
+    float dual_hypothesis_orb_success = 0.0f;
+  };
+
   struct Result {
     int frame_index = 0;
     float translation_error = 0.0f;
     float rotation_error = 0.0f;
     float tracking_success = 0.0f;
+    bool prediction_valid = false;
+    float prediction_translation_error = 0.0f;
+    float prediction_rotation_error = 0.0f;
+    float prediction_success = 0.0f;
     ExecutionTimes execution_times;
+    FusionDiagnostics fusion_diagnostics;
   };
 
  public:
@@ -78,8 +133,25 @@ class RBOTEvaluator {
   void set_rotation_error_threshold(float rotation_error_threshold);
   void set_run_sequentially(bool run_sequentially);
   void set_visualize_all_results(bool visualize_all_results);
+  void set_use_constant_velocity_prediction(
+      bool use_constant_velocity_prediction);
+  void set_use_reliability_weighted_fusion(
+      bool use_reliability_weighted_fusion);
+  void set_use_directional_temporal_prior(bool use_directional_temporal_prior);
+  void set_use_windowed_temporal_prior(bool use_windowed_temporal_prior);
+  void set_use_phase_consistent_temporal_prior(
+      bool use_phase_consistent_temporal_prior);
+  void set_use_selective_recovery(bool use_selective_recovery);
+  void set_use_validated_prediction_recovery(
+      bool use_validated_prediction_recovery);
+  void set_use_dual_model_texture_hypothesis(
+      bool use_dual_model_texture_hypothesis);
+  void set_use_dual_hypothesis_independent_benchmark_reset(
+      bool use_dual_hypothesis_independent_benchmark_reset);
   void SaveResults(std::filesystem::path save_directory);
   void DoNotSaveResults();
+  void EnableDiagnostics(std::filesystem::path diagnostics_directory);
+  void DisableDiagnostics();
 
   // Setters for tracker configuration
   void set_use_region_modality(bool use_region_modality);
@@ -120,14 +192,21 @@ class RBOTEvaluator {
   void SetUpTracker(
       const RunConfiguration &run_configuration,
       const std::shared_ptr<m3t::RendererGeometry> &renderer_geometry_ptr,
-      std::shared_ptr<m3t::Tracker> *tracker_ptr) const;
+      std::shared_ptr<m3t::Tracker> *tracker_ptr,
+      bool force_orb_model_texture = false) const;
   void ResetBody(const std::shared_ptr<m3t::Tracker> &tracker_ptr,
                  int i_frame) const;
   void ResetOcclusionBody(const std::shared_ptr<m3t::Tracker> &tracker_ptr,
                           int i_frame) const;
   void ExecuteMeasuredTrackingCycle(
       const std::shared_ptr<m3t::Tracker> &tracker_ptr, int iteration,
-      ExecutionTimes *execution_times) const;
+      ExecutionTimes *execution_times, bool calculate_results = true) const;
+  void CollectDiagnostics(const std::shared_ptr<m3t::Tracker> &tracker_ptr,
+                          FusionDiagnostics *diagnostics) const;
+  static ModalityDiagnostics CalculateModalityDiagnostics(
+      const std::shared_ptr<m3t::Modality> &modality_ptr,
+      float tikhonov_parameter_rotation,
+      float tikhonov_parameter_translation);
 
   // Helper methods for the calculation of results
   void CalculatePoseResults(const m3t::Transform3fA &body2world_pose,
@@ -140,6 +219,8 @@ class RBOTEvaluator {
   static void VisualizeFinalResult(const Result &result,
                                    const std::string &title);
   void SaveFinalResult(const Result &result, const std::string &title) const;
+  void SaveDiagnostics(const std::vector<Result> &results,
+                       const std::string &title) const;
 
   // General helper methods
   bool LoadBodies();
@@ -193,8 +274,19 @@ class RBOTEvaluator {
   float rotation_error_threshold_ = 5.0f * m3t::kPi / 180.0f;
   bool run_sequentially_ = true;
   bool visualize_all_results_ = true;
+  bool use_constant_velocity_prediction_ = false;
+  bool use_reliability_weighted_fusion_ = false;
+  bool use_directional_temporal_prior_ = false;
+  bool use_windowed_temporal_prior_ = false;
+  bool use_phase_consistent_temporal_prior_ = false;
+  bool use_selective_recovery_ = false;
+  bool use_validated_prediction_recovery_ = false;
+  bool use_dual_model_texture_hypothesis_ = false;
+  bool use_dual_hypothesis_independent_benchmark_reset_ = false;
   bool save_results_ = false;
   std::filesystem::path save_directory_;
+  bool collect_diagnostics_ = false;
+  std::filesystem::path diagnostics_directory_;
   bool set_up_ = false;
 };
 

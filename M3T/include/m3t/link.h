@@ -95,6 +95,10 @@ class Link {
   void set_link2world_pose(const Transform3fA &link2world_pose);
   void set_free_directions(const std::array<bool, 6> &free_directions);
   void set_fixed_body2joint_pose(bool fixed_body2joint_pose);
+  void set_use_reliability_weighted_fusion(
+      bool use_reliability_weighted_fusion);
+  void SetDirectionalTemporalPrior(const Transform3fA &predicted_pose);
+  void ClearDirectionalTemporalPrior();
 
   // Main methods
   bool DefineJacobian(int jacobian_size, int first_jacobian_index);
@@ -126,6 +130,14 @@ class Link {
   const Transform3fA &link2world_pose() const;
   const std::array<bool, 6> &free_directions() const;
   bool fixed_body2joint_pose() const;
+  bool use_reliability_weighted_fusion() const;
+  float last_texture_reliability_weight() const;
+  float last_model_texture_reliability_weight() const;
+  float last_model_photometric_reliability_weight() const;
+  float last_model_contour_reliability_weight() const;
+  float last_model_ecc_reliability_weight() const;
+  float last_model_hypothesis_reliability_weight() const;
+  float last_video_ecc_reliability_weight() const;
   int first_jacobian_index() const;
   bool set_up() const;
 
@@ -134,6 +146,7 @@ class Link {
   bool LoadMetaData();
   bool IsSetup(bool check_jacobian_defined);
   static Eigen::Matrix<float, 6, 6> Adjoint(const Transform3fA &pose);
+  void ApplyDirectionalTemporalPrior();
 
   // Internal data
   Eigen::Matrix<float, 6, 1> gradient_{};
@@ -154,8 +167,18 @@ class Link {
   Transform3fA link2world_pose_{Transform3fA::Identity()};
   std::array<bool, 6> free_directions_{true, true, true, true, true, true};
   bool fixed_body2joint_pose_ = true;
+  bool use_reliability_weighted_fusion_ = false;
+  bool directional_temporal_prior_valid_ = false;
+  Transform3fA predicted_pose_{Transform3fA::Identity()};
 
   // State variables
+  float last_texture_reliability_weight_ = 1.0f;
+  float last_model_texture_reliability_weight_ = 1.0f;
+  float last_model_photometric_reliability_weight_ = 1.0f;
+  float last_model_contour_reliability_weight_ = 1.0f;
+  float last_model_ecc_reliability_weight_ = 1.0f;
+  float last_model_hypothesis_reliability_weight_ = 1.0f;
+  float last_video_ecc_reliability_weight_ = 1.0f;
   bool jacobian_defined_ = false;
   bool set_up_ = false;
 };

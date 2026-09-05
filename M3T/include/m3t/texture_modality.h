@@ -9,9 +9,13 @@
 #include <m3t/body.h>
 #include <m3t/camera.h>
 #include <m3t/common.h>
+#ifdef USE_ONNXRUNTIME
+#include <m3t/disk_feature_extractor.h>
+#endif
 #include <m3t/modality.h>
 #include <m3t/renderer.h>
 #include <m3t/silhouette_renderer.h>
+#include <m3t/textured_renderer.h>
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -138,6 +142,29 @@ class TextureModality : public Modality {
     Eigen::Vector3f center_f_camera{};
     Eigen::Vector2f center;
     Eigen::Vector2f correspondence_center;
+    bool from_model_texture = false;
+    bool from_model_texture_disk = false;
+  };
+
+  struct PhotometricDataPoint {
+    Eigen::Vector3f center_f_body{};
+    float model_intensity = 0.0f;
+  };
+
+  struct ModelContourDataPoint {
+    Eigen::Vector3f center_f_body{};
+    Eigen::Vector2f normal{};
+    Eigen::Vector2f correspondence_center{};
+  };
+
+  struct ModelEccDataPoint {
+    Eigen::Vector3f center_f_body{};
+    Eigen::Vector2f correspondence_center{};
+  };
+
+  struct VideoEccDataPoint {
+    Eigen::Vector3f center_f_body{};
+    Eigen::Vector2f correspondence_center{};
   };
 
  public:
@@ -185,6 +212,42 @@ class TextureModality : public Modality {
   // Setters for general parameters
   void set_descriptor_type(DescriptorType descriptor_type);
   void set_focused_image_size(int focused_image_size);
+  void set_use_optical_flow_tracking(bool use_optical_flow_tracking);
+  void set_use_geometry_guided_matching(bool use_geometry_guided_matching);
+  void set_use_model_texture_sift(bool use_model_texture_sift);
+  void set_use_model_texture_akaze(bool use_model_texture_akaze);
+  void set_use_model_texture_disk(
+      bool use_model_texture_disk,
+      const std::filesystem::path &model_path = {});
+  void set_use_adaptive_model_texture_disk(
+      bool use_adaptive_model_texture_disk,
+      const std::filesystem::path &model_path = {});
+  void set_use_model_texture_disk_fusion(
+      bool use_model_texture_disk_fusion,
+      const std::filesystem::path &model_path = {});
+  void set_use_video_ecc_tracking(bool use_video_ecc_tracking);
+  void UseModelTextureMatching(
+      const std::shared_ptr<FocusedTexturedRenderer> &textured_renderer_ptr);
+  void DoNotUseModelTextureMatching();
+  void UseModelPhotometricTracking(
+      const std::shared_ptr<FocusedTexturedRenderer> &textured_renderer_ptr);
+  void DoNotUseModelPhotometricTracking();
+  void UseModelContourTracking(
+      const std::shared_ptr<FocusedTexturedRenderer> &textured_renderer_ptr);
+  void DoNotUseModelContourTracking();
+  void UseModelEccTracking(
+      const std::shared_ptr<FocusedTexturedRenderer> &textured_renderer_ptr);
+  void DoNotUseModelEccTracking();
+  void UseModelHypothesisSearch(
+      const std::shared_ptr<FocusedTexturedRenderer> &textured_renderer_ptr);
+  void DoNotUseModelHypothesisSearch();
+  void set_model_texture_debug_directory(
+      const std::filesystem::path &debug_directory);
+  void set_model_texture_disk_ransac_threshold(float threshold);
+  void set_model_texture_disk_input_size(int input_size);
+  void set_use_adaptive_model_texture_geometry(
+      bool use_adaptive_model_texture_geometry);
+  void set_use_model_texture_pnp_geometry(bool use_model_texture_pnp_geometry);
   void set_descriptor_distance_threshold(float descriptor_distance_threshold);
   void set_tukey_norm_constant(float tukey_norm_constant);
   void set_standard_deviations(const std::vector<float> &standard_deviations);
@@ -241,6 +304,7 @@ class TextureModality : public Modality {
   // Setters for visualization parameters
   void set_visualization_min_depth(float visualization_min_depth);
   void set_visualization_max_depth(float visualization_max_depth);
+  void set_collect_diagnostics(bool collect_diagnostics);
 
   // Main methods
   bool StartModality(int iteration, int corr_iteration) override;
@@ -267,6 +331,14 @@ class TextureModality : public Modality {
   // Getters for general parameters
   DescriptorType descriptor_type() const;
   int focused_image_size() const;
+  bool use_optical_flow_tracking() const;
+  bool use_geometry_guided_matching() const;
+  bool use_model_texture_matching() const;
+  bool use_model_photometric_tracking() const;
+  bool use_model_contour_tracking() const;
+  bool use_model_ecc_tracking() const;
+  bool use_model_hypothesis_search() const;
+  bool use_video_ecc_tracking() const;
   float descriptor_distance_threshold() const;
   float tukey_norm_constant() const;
   const std::vector<float> &standard_deviations() const;
@@ -317,6 +389,47 @@ class TextureModality : public Modality {
   float visualization_min_depth() const;
   float visualization_max_depth() const;
 
+  // Getters for lightweight correspondence diagnostics
+  size_t n_correspondence_points() const;
+  int n_valid_gradient_points() const;
+  float mean_reprojection_error() const;
+  float inlier_fraction() const;
+  size_t n_model_texture_correspondence_points() const;
+  int n_valid_model_texture_points() const;
+  float mean_model_texture_reprojection_error() const;
+  float model_texture_inlier_fraction() const;
+  const Eigen::Matrix<float, 6, 1> &model_texture_gradient() const;
+  const Eigen::Matrix<float, 6, 6> &model_texture_hessian() const;
+  int n_valid_model_texture_orb_points() const;
+  float mean_model_texture_orb_reprojection_error() const;
+  Eigen::Matrix<float, 6, 1> model_texture_orb_gradient() const;
+  Eigen::Matrix<float, 6, 6> model_texture_orb_hessian() const;
+  int n_valid_model_texture_disk_points() const;
+  float mean_model_texture_disk_reprojection_error() const;
+  const Eigen::Matrix<float, 6, 1> &model_texture_disk_gradient() const;
+  const Eigen::Matrix<float, 6, 6> &model_texture_disk_hessian() const;
+  int n_valid_model_photometric_points() const;
+  float mean_model_photometric_residual() const;
+  const Eigen::Matrix<float, 6, 1> &model_photometric_gradient() const;
+  const Eigen::Matrix<float, 6, 6> &model_photometric_hessian() const;
+  int n_valid_model_contour_points() const;
+  float mean_model_contour_residual() const;
+  const Eigen::Matrix<float, 6, 1> &model_contour_gradient() const;
+  const Eigen::Matrix<float, 6, 6> &model_contour_hessian() const;
+  int n_valid_model_ecc_points() const;
+  float mean_model_ecc_residual() const;
+  float model_ecc_correlation() const;
+  const Eigen::Matrix<float, 6, 1> &model_ecc_gradient() const;
+  const Eigen::Matrix<float, 6, 6> &model_ecc_hessian() const;
+  float model_hypothesis_confidence() const;
+  const Eigen::Matrix<float, 6, 1> &model_hypothesis_gradient() const;
+  const Eigen::Matrix<float, 6, 6> &model_hypothesis_hessian() const;
+  int n_valid_video_ecc_points() const;
+  float mean_video_ecc_residual() const;
+  float video_ecc_correlation() const;
+  const Eigen::Matrix<float, 6, 1> &video_ecc_gradient() const;
+  const Eigen::Matrix<float, 6, 6> &video_ecc_hessian() const;
+
  private:
   // Helper method for setup
   bool LoadMetaData();
@@ -333,6 +446,17 @@ class TextureModality : public Modality {
 
   // Helper methods for CalculateCorrespondences
   void DetectAndComputeCorrKeypoints();
+  void ComputeOpticalFlowCorrespondences();
+  void ComputeGeometryGuidedCorrespondences();
+  void ComputeModelTextureCorrespondences();
+  void ComputeDiskModelTextureCorrespondences();
+  void ComputeModelPhotometricData();
+  void ComputeModelContourData();
+  void ComputeModelEccData();
+  void ComputeModelHypothesis();
+  float ModelTextureGradientCorrelation();
+  void ComputeVideoEccKeyframe();
+  void ComputeVideoEccCorrespondences();
   bool CalculateScaleAndRegionOfInterest(cv::Rect *region_of_interest,
                                          float *scale) const;
   void ComputeKeyframeData();
@@ -372,11 +496,81 @@ class TextureModality : public Modality {
 
   // Internal data objects
   std::vector<DataPoint> data_points_;
+  std::vector<PhotometricDataPoint> model_photometric_data_points_;
+  std::vector<ModelContourDataPoint> model_contour_data_points_;
+  std::vector<ModelEccDataPoint> model_ecc_data_points_;
+  std::vector<VideoEccDataPoint> video_ecc_data_points_;
+  cv::Mat video_ecc_keyframe_image_;
+  cv::Mat video_ecc_keyframe_mask_;
+  std::vector<Eigen::Vector3f> video_ecc_keyframe_body_points_;
+  std::vector<cv::Point2f> video_ecc_keyframe_image_points_;
+  int n_valid_gradient_points_ = 0;
+  float mean_reprojection_error_ = 0.0f;
+  float inlier_fraction_ = 0.0f;
+  size_t n_model_texture_correspondence_points_ = 0;
+  int n_valid_model_texture_points_ = 0;
+  float mean_model_texture_reprojection_error_ = 0.0f;
+  float model_texture_inlier_fraction_ = 0.0f;
+  Eigen::Matrix<float, 6, 1> model_texture_gradient_ =
+      Eigen::Matrix<float, 6, 1>::Zero();
+  Eigen::Matrix<float, 6, 6> model_texture_hessian_ =
+      Eigen::Matrix<float, 6, 6>::Zero();
+  int n_valid_model_texture_disk_points_ = 0;
+  float mean_model_texture_disk_reprojection_error_ = 0.0f;
+  Eigen::Matrix<float, 6, 1> model_texture_disk_gradient_ =
+      Eigen::Matrix<float, 6, 1>::Zero();
+  Eigen::Matrix<float, 6, 6> model_texture_disk_hessian_ =
+      Eigen::Matrix<float, 6, 6>::Zero();
+  int n_valid_model_photometric_points_ = 0;
+  float mean_model_photometric_residual_ = 0.0f;
+  Eigen::Matrix<float, 6, 1> model_photometric_gradient_ =
+      Eigen::Matrix<float, 6, 1>::Zero();
+  Eigen::Matrix<float, 6, 6> model_photometric_hessian_ =
+      Eigen::Matrix<float, 6, 6>::Zero();
+  int n_valid_model_contour_points_ = 0;
+  float mean_model_contour_residual_ = 0.0f;
+  Eigen::Matrix<float, 6, 1> model_contour_gradient_ =
+      Eigen::Matrix<float, 6, 1>::Zero();
+  Eigen::Matrix<float, 6, 6> model_contour_hessian_ =
+      Eigen::Matrix<float, 6, 6>::Zero();
+  int n_valid_model_ecc_points_ = 0;
+  float mean_model_ecc_residual_ = 0.0f;
+  float model_ecc_correlation_ = 0.0f;
+  Eigen::Matrix<float, 6, 1> model_ecc_gradient_ =
+      Eigen::Matrix<float, 6, 1>::Zero();
+  Eigen::Matrix<float, 6, 6> model_ecc_hessian_ =
+      Eigen::Matrix<float, 6, 6>::Zero();
+  float model_hypothesis_confidence_ = 0.0f;
+  Transform3fA model_hypothesis_target_pose_{Transform3fA::Identity()};
+  Eigen::Matrix<float, 6, 1> model_hypothesis_gradient_ =
+      Eigen::Matrix<float, 6, 1>::Zero();
+  Eigen::Matrix<float, 6, 6> model_hypothesis_hessian_ =
+      Eigen::Matrix<float, 6, 6>::Zero();
+  int n_valid_video_ecc_points_ = 0;
+  float mean_video_ecc_residual_ = 0.0f;
+  float video_ecc_correlation_ = 0.0f;
+  Eigen::Matrix<float, 6, 1> video_ecc_gradient_ =
+      Eigen::Matrix<float, 6, 1>::Zero();
+  Eigen::Matrix<float, 6, 6> video_ecc_hessian_ =
+      Eigen::Matrix<float, 6, 6>::Zero();
+  cv::Mat model_photometric_gray_image_;
+  cv::Mat model_photometric_gradient_x_;
+  cv::Mat model_photometric_gradient_y_;
+  float model_photometric_scale_ = 1.0f;
+  float model_photometric_offset_ = 0.0f;
   cv::Ptr<cv::Feature2D> feature_detector_;
   cv::Ptr<cv::Feature2D> feature_descriptor_;
+  cv::Ptr<cv::Feature2D> model_texture_feature_detector_;
+  cv::Ptr<cv::Feature2D> model_texture_sift_detector_;
+  cv::Ptr<cv::Feature2D> model_texture_akaze_detector_;
+#ifdef USE_ONNXRUNTIME
+  std::unique_ptr<DiskFeatureExtractor> disk_feature_extractor_;
+#endif
   cv::Ptr<cv::DescriptorMatcher> descriptor_matcher_;
   std::deque<std::vector<Eigen::Vector3f>> points_keyframes_;
   std::deque<cv::Mat> descriptors_keyframes_;
+  std::deque<std::vector<cv::Point2f>> image_points_keyframes_;
+  std::deque<cv::Mat> gray_images_keyframes_;
   std::vector<cv::KeyPoint> keypoints_;
   cv::Mat descriptors_;
   Eigen::Vector3f orientation_last_keyframe_{};
@@ -395,10 +589,51 @@ class TextureModality : public Modality {
   std::shared_ptr<DepthCamera> depth_camera_ptr_ = nullptr;
   std::shared_ptr<FocusedSilhouetteRenderer> silhouette_renderer_ptr_ = nullptr;
   std::shared_ptr<FocusedDepthRenderer> depth_renderer_ptr_ = nullptr;
+  std::shared_ptr<FocusedTexturedRenderer> textured_renderer_ptr_ = nullptr;
 
   // Parameters for general settings
   DescriptorType descriptor_type_ = DescriptorType::ORB;
   int focused_image_size_ = 200;
+  bool use_optical_flow_tracking_ = false;
+  bool use_geometry_guided_matching_ = false;
+  bool use_model_texture_matching_ = false;
+  bool use_model_texture_sift_ = false;
+  bool use_model_texture_akaze_ = false;
+  bool use_model_texture_disk_ = false;
+  bool use_adaptive_model_texture_disk_ = false;
+  bool use_model_texture_disk_fusion_ = false;
+  bool model_texture_statistics_available_ = false;
+  bool adaptive_model_texture_disk_selected_ = false;
+  int adaptive_model_texture_disk_evidence_ = 0;
+  bool use_model_photometric_tracking_ = false;
+  bool use_model_contour_tracking_ = false;
+  bool use_model_ecc_tracking_ = false;
+  bool use_model_hypothesis_search_ = false;
+  bool use_video_ecc_tracking_ = false;
+  int n_model_photometric_points_ = 120;
+  float model_photometric_tukey_constant_ = 30.0f;
+  float model_photometric_variance_ = 100.0f;
+  int n_model_contour_points_ = 120;
+  float model_contour_search_radius_ = 8.0f;
+  float model_contour_tukey_constant_ = 8.0f;
+  float model_contour_variance_ = 4.0f;
+  int n_model_ecc_points_ = 80;
+  float model_ecc_tukey_constant_ = 8.0f;
+  float model_ecc_variance_ = 4.0f;
+  int n_video_ecc_points_ = 80;
+  float video_ecc_tukey_constant_ = 10.0f;
+  float video_ecc_variance_ = 4.0f;
+  float model_texture_search_radius_ = 12.0f;
+  float model_texture_ratio_threshold_ = 0.75f;
+  float model_texture_max_descriptor_distance_ = 64.0f;
+  float model_texture_disk_similarity_threshold_ = 0.70f;
+  float model_texture_disk_ransac_threshold_ = 3.0f;
+  int model_texture_disk_input_size_ = 128;
+  bool use_adaptive_model_texture_geometry_ = false;
+  bool use_model_texture_pnp_geometry_ = false;
+  std::filesystem::path model_texture_disk_model_path_{};
+  std::filesystem::path model_texture_debug_directory_{};
+  bool model_texture_debug_images_saved_ = false;
   float descriptor_distance_threshold_ = 0.7f;
   float tukey_norm_constant_ = 20.0f;
   std::vector<float> standard_deviations_{15.0f, 5.0f};
@@ -442,6 +677,7 @@ class TextureModality : public Modality {
   bool visualize_points_depth_image_result_ = false;
   bool visualize_points_silhouette_rendering_result_ = false;
   bool visualize_points_depth_rendering_result_ = false;
+  bool collect_diagnostics_ = false;
 
   // Parameters for visualizations
   float visualization_min_depth_ = 0.0f;

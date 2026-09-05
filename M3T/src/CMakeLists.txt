@@ -8,6 +8,7 @@ set(SOURCES
         renderer_geometry.cpp
         renderer.cpp
         normal_renderer.cpp
+        textured_renderer.cpp
         silhouette_renderer.cpp
         basic_depth_renderer.cpp
         model.cpp
@@ -41,6 +42,7 @@ set(HEADERS
         ../include/m3t/renderer_geometry.h
         ../include/m3t/renderer.h
         ../include/m3t/normal_renderer.h
+        ../include/m3t/textured_renderer.h
         ../include/m3t/silhouette_renderer.h
         ../include/m3t/basic_depth_renderer.h
         ../include/m3t/model.h
@@ -69,6 +71,11 @@ set(HEADERS
         ../include/m3t/tracker.h
         ../include/m3t/generator.h)
 
+if (USE_ONNXRUNTIME)
+    list(APPEND SOURCES disk_feature_extractor.cpp)
+    list(APPEND HEADERS ../include/m3t/disk_feature_extractor.h)
+endif ()
+
 if (USE_AZURE_KINECT)
     list(APPEND SOURCES azure_kinect_camera.cpp)
     list(APPEND HEADERS ../include/m3t/azure_kinect_camera.h)
@@ -91,6 +98,9 @@ endif ()
 if (USE_REALSENSE)
     list(APPEND LIBRARIES ${realsense2_LIBRARY})
 endif ()
+if (USE_ONNXRUNTIME)
+    list(APPEND LIBRARIES "${ONNXRUNTIME_DIR}/lib/onnxruntime.lib")
+endif ()
 
 
 # Define target
@@ -103,6 +113,10 @@ target_include_directories(m3t PUBLIC
 target_include_directories(m3t PUBLIC 
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
         $<INSTALL_INTERFACE:include>)
+if (USE_ONNXRUNTIME)
+    target_include_directories(m3t PUBLIC "${ONNXRUNTIME_DIR}/include")
+    target_compile_definitions(m3t PUBLIC USE_ONNXRUNTIME=TRUE)
+endif ()
 set_target_properties(m3t PROPERTIES PUBLIC_HEADER "${HEADERS}")
 
 

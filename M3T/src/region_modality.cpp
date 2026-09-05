@@ -372,6 +372,10 @@ void RegionModality::set_visualization_max_depth(
   visualization_max_depth_ = visualization_max_depth;
 }
 
+void RegionModality::set_collect_diagnostics(bool collect_diagnostics) {
+  collect_diagnostics_ = collect_diagnostics;
+}
+
 bool RegionModality::StartModality(int iteration, int corr_iteration) {
   if (!IsSetup()) return false;
 
@@ -490,6 +494,9 @@ bool RegionModality::CalculateGradientAndHessian(int iteration,
   PrecalculatePoseVariables();
   gradient_.setZero();
   hessian_.setZero();
+  n_valid_gradient_lines_ = 0;
+  mean_measured_variance_ = 0.0f;
+  mean_absolute_standardized_residual_ = 0.0f;
 
   // Iterate over correspondence lines
   for (auto &data_line : data_lines_) {
@@ -528,6 +535,15 @@ bool RegionModality::CalculateGradientAndHessian(int iteration,
           learning_rate_ / data_line.measured_variance;
     }
 
+    if (collect_diagnostics_) {
+      ++n_valid_gradient_lines_;
+      mean_measured_variance_ += data_line.measured_variance;
+      mean_absolute_standardized_residual_ +=
+          std::abs(data_line.mean - delta_cs) /
+          std::sqrt(std::max(data_line.measured_variance,
+                             std::numeric_limits<float>::min()));
+    }
+
     // Calculate first order derivative of delta_cs with respect to theta
     Eigen::RowVector3f ddelta_cs_dcenter{
         data_line.normal_component_to_scale * data_line.normal_u * fu_z,
@@ -554,6 +570,10 @@ bool RegionModality::CalculateGradientAndHessian(int iteration,
         ddelta_cs_dtheta;
   }
   hessian_ = hessian_.selfadjointView<Eigen::Lower>();
+  if (collect_diagnostics_ && n_valid_gradient_lines_ > 0) {
+    mean_measured_variance_ /= float(n_valid_gradient_lines_);
+    mean_absolute_standardized_residual_ /= float(n_valid_gradient_lines_);
+  }
   return true;
 }
 
@@ -591,6 +611,75 @@ bool RegionModality::VisualizeResults(int save_idx) {
     VisualizePointsHistogramImage("histogram_image_result", save_idx);
   if (visualize_pose_result_) VisualizePose();
   return true;
+}
+
+float RegionModality::CalculateSilhouetteValidationScore(
+    const std::shared_ptr<FocusedSilhouetteRenderer>
+        &silhouette_renderer_ptr) const {
+  if (!set_up_ || !silhouette_renderer_ptr || !color_histograms_ptr_ ||
+      !silhouette_renderer_ptr->StartRendering() ||
+      !silhouette_renderer_ptr->IsBodyVisible(body_ptr_->name()) ||
+      !silhouette_renderer_ptr->FetchSilhouetteImage())
+    return -std::numeric_limits<float>::infinity();
+
+  const cv::Mat &silhouette{
+      silhouette_renderer_ptr->focused_silhouette_image()};
+  cv::Mat mask;
+  cv::compare(silhouette, body_ptr_->body_id(), mask, cv::CMP_EQ);
+  if (cv::countNonZero(mask) < 20)
+    return -std::numeric_limits<float>::infinity();
+
+  const cv::Mat kernel{cv::getStructuringElement(
+      cv::MORPH_ELLIPSE, cv::Size{7, 7})};
+  cv::Mat eroded;
+  cv::Mat dilated;
+  cv::erode(mask, eroded, kernel);
+  cv::dilate(mask, dilated, kernel);
+  cv::Mat inner_band;
+  cv::Mat outer_band;
+  cv::subtract(mask, eroded, inner_band);
+  cv::subtract(dilated, mask, outer_band);
+
+  const cv::Mat &image{color_camera_ptr_->image()};
+  const float inverse_scale{1.0f / silhouette_renderer_ptr->scale()};
+  const float corner_u{silhouette_renderer_ptr->corner_u()};
+  const float corner_v{silhouette_renderer_ptr->corner_v()};
+  double foreground_score{0.0};
+  double background_score{0.0};
+  int n_foreground{0};
+  int n_background{0};
+  constexpr float epsilon{1.0e-6f};
+  for (int v = 0; v < silhouette.rows; ++v) {
+    for (int u = 0; u < silhouette.cols; ++u) {
+      const bool foreground{inner_band.at<uchar>(v, u) != 0};
+      const bool background{outer_band.at<uchar>(v, u) != 0};
+      if (!foreground && !background) continue;
+      const int image_u{int(corner_u + (float(u) + 0.5f) * inverse_scale)};
+      const int image_v{int(corner_v + (float(v) + 0.5f) * inverse_scale)};
+      if (image_u < 0 || image_u >= image.cols || image_v < 0 ||
+          image_v >= image.rows)
+        continue;
+      float probability_f;
+      float probability_b;
+      color_histograms_ptr_->GetProbabilities(
+          image.at<cv::Vec3b>(image_v, image_u), &probability_f,
+          &probability_b);
+      const float sum{probability_f + probability_b + 2.0f * epsilon};
+      if (foreground) {
+        foreground_score +=
+            std::log((probability_f + epsilon) / sum);
+        ++n_foreground;
+      } else {
+        background_score +=
+            std::log((probability_b + epsilon) / sum);
+        ++n_background;
+      }
+    }
+  }
+  if (n_foreground == 0 || n_background == 0)
+    return -std::numeric_limits<float>::infinity();
+  return float(foreground_score / double(n_foreground) +
+               background_score / double(n_background));
 }
 
 const std::shared_ptr<ColorCamera> &RegionModality::color_camera_ptr() const {
@@ -796,6 +885,22 @@ float RegionModality::visualization_min_depth() const {
 
 float RegionModality::visualization_max_depth() const {
   return visualization_max_depth_;
+}
+
+size_t RegionModality::n_correspondence_lines() const {
+  return data_lines_.size();
+}
+
+int RegionModality::n_valid_gradient_lines() const {
+  return n_valid_gradient_lines_;
+}
+
+float RegionModality::mean_measured_variance() const {
+  return mean_measured_variance_;
+}
+
+float RegionModality::mean_absolute_standardized_residual() const {
+  return mean_absolute_standardized_residual_;
 }
 
 void RegionModality::SetImshowVariables() {

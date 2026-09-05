@@ -77,11 +77,12 @@ bool RendererGeometry::SetUp() {
     // Assemble vertex data
     std::vector<float> vertex_data;
     AssembleVertexData(*render_data_body.body_ptr, &vertex_data);
-    render_data_body.n_vertices = unsigned(vertex_data.size()) / 6;
+    render_data_body.n_vertices = unsigned(vertex_data.size()) / 8;
 
     // Create GL Vertex objects
     if (set_up_) DeleteGLVertexObjects(&render_data_body);
-    CreateGLVertexObjects(vertex_data, &render_data_body);
+    CreateGLVertexObjects(vertex_data, *render_data_body.body_ptr,
+                          &render_data_body);
   }
   glfwMakeContextCurrent(nullptr);
 
@@ -108,11 +109,11 @@ bool RendererGeometry::AddBody(const std::shared_ptr<Body> &body_ptr) {
     // Assemble vertex data
     std::vector<float> vertex_data;
     AssembleVertexData(*body_ptr.get(), &vertex_data);
-    render_data_body.n_vertices = unsigned(vertex_data.size()) / 6;
+    render_data_body.n_vertices = unsigned(vertex_data.size()) / 8;
 
     // Create GL Vertex objects
     glfwMakeContextCurrent(window_);
-    CreateGLVertexObjects(vertex_data, &render_data_body);
+    CreateGLVertexObjects(vertex_data, *body_ptr, &render_data_body);
     glfwMakeContextCurrent(nullptr);
   } else if (set_up_ && !body_ptr->set_up()) {
     set_up_ = false;
@@ -191,7 +192,9 @@ bool RendererGeometry::set_up() const { return set_up_; }
 
 void RendererGeometry::AssembleVertexData(const Body &body,
                                           std::vector<float> *vertex_data) {
-  for (const auto &triangle_indices : body.mesh_indices()) {
+  for (size_t triangle_index = 0;
+       triangle_index < body.mesh_indices().size(); ++triangle_index) {
+    const auto &triangle_indices{body.mesh_indices()[triangle_index]};
     std::array<Eigen::Vector3f, 3> points;
     for (int i = 0; i < 3; ++i)
       points[i] = body.vertices()[triangle_indices[i]];
@@ -199,14 +202,23 @@ void RendererGeometry::AssembleVertexData(const Body &body,
     Eigen::Vector3f normal{
         (points[2] - points[1]).cross(points[0] - points[1]).normalized()};
 
-    for (auto point : points) {
+    for (int i = 0; i < 3; ++i) {
+      const auto &point{points[i]};
       vertex_data->insert(end(*vertex_data), point.data(), point.data() + 3);
       vertex_data->insert(end(*vertex_data), normal.data(), normal.data() + 3);
+      if (body.has_texture()) {
+        const auto &uv{body.mesh_texture_coordinates()[triangle_index][i]};
+        vertex_data->insert(end(*vertex_data), uv.data(), uv.data() + 2);
+      } else {
+        vertex_data->push_back(0.0f);
+        vertex_data->push_back(0.0f);
+      }
     }
   }
 }
 
 void RendererGeometry::CreateGLVertexObjects(const std::vector<float> &vertices,
+                                             const Body &body,
                                              RenderDataBody *render_data_body) {
   glGenVertexArrays(1, &render_data_body->vao);
   glBindVertexArray(render_data_body->vao);
@@ -216,17 +228,41 @@ void RendererGeometry::CreateGLVertexObjects(const std::vector<float> &vertices,
   glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float),
                &vertices.front(), GL_STATIC_DRAW);
 
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float),
                         (void *)(3 * sizeof(float)));
   glEnableVertexAttribArray(1);
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float),
+                        (void *)(6 * sizeof(float)));
+  glEnableVertexAttribArray(2);
+
+  cv::Mat texture_image;
+  if (body.has_texture())
+    texture_image = cv::imread(body.texture_image_path().string(),
+                               cv::IMREAD_COLOR);
+  if (texture_image.empty())
+    texture_image = cv::Mat(1, 1, CV_8UC3, cv::Scalar(127, 127, 127));
+  cv::flip(texture_image, texture_image, 0);
+  glGenTextures(1, &render_data_body->texture);
+  glBindTexture(GL_TEXTURE_2D, render_data_body->texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, texture_image.cols,
+               texture_image.rows, 0, GL_BGR, GL_UNSIGNED_BYTE,
+               texture_image.data);
+  glGenerateMipmap(GL_TEXTURE_2D);
+  glBindTexture(GL_TEXTURE_2D, 0);
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
 }
 
 void RendererGeometry::DeleteGLVertexObjects(RenderDataBody *render_data_body) {
+  glDeleteTextures(1, &render_data_body->texture);
   glDeleteBuffers(1, &render_data_body->vbo);
   glDeleteVertexArrays(1, &render_data_body->vao);
 }

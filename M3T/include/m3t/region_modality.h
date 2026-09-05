@@ -244,6 +244,7 @@ class RegionModality : public Modality {
   // Setters for visualization parameters
   void set_visualization_min_depth(float visualization_min_depth);
   void set_visualization_max_depth(float visualization_max_depth);
+  void set_collect_diagnostics(bool collect_diagnostics);
 
   // Main methods
   bool StartModality(int iteration, int corr_iteration) override;
@@ -254,6 +255,9 @@ class RegionModality : public Modality {
   bool VisualizeOptimization(int save_idx) override;
   bool CalculateResults(int iteration) override;
   bool VisualizeResults(int save_idx) override;
+  float CalculateSilhouetteValidationScore(
+      const std::shared_ptr<FocusedSilhouetteRenderer>
+          &silhouette_renderer_ptr) const;
 
   // Getters data
   const std::shared_ptr<ColorCamera> &color_camera_ptr() const;
@@ -320,6 +324,12 @@ class RegionModality : public Modality {
   // Getters for visualization parameters
   float visualization_min_depth() const;
   float visualization_max_depth() const;
+
+  // Getters for lightweight correspondence diagnostics
+  size_t n_correspondence_lines() const;
+  int n_valid_gradient_lines() const;
+  float mean_measured_variance() const;
+  float mean_absolute_standardized_residual() const;
 
  private:
   // Helper method for setup
@@ -398,6 +408,9 @@ class RegionModality : public Modality {
 
   // Internal data objects
   std::vector<DataLine> data_lines_;
+  int n_valid_gradient_lines_ = 0;
+  float mean_measured_variance_ = 0.0f;
+  float mean_absolute_standardized_residual_ = 0.0f;
 
   // Pointers to referenced objects
   std::shared_ptr<ColorCamera> color_camera_ptr_ = nullptr;
@@ -452,6 +465,7 @@ class RegionModality : public Modality {
   bool visualize_points_histogram_image_optimization_ = false;
   bool visualize_points_result_ = false;
   bool visualize_points_histogram_image_result_ = false;
+  bool collect_diagnostics_ = false;
 
   // Parameters for visualizations
   float visualization_min_depth_ = 0.0f;

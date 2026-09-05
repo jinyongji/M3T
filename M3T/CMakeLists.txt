@@ -10,6 +10,8 @@ project(M3T)
 option(USE_AZURE_KINECT "Use Azure Kinect" ON)
 option(USE_REALSENSE "Use RealSense D435" ON)
 option(USE_GTEST "Use gtest" ON)
+option(USE_ONNXRUNTIME "Use ONNX Runtime for learned local features" OFF)
+set(ONNXRUNTIME_DIR "" CACHE PATH "Root directory of an ONNX Runtime C/C++ SDK")
 
 
 # Libraries
@@ -33,7 +35,7 @@ if (UNIX)
 endif ()
 find_package(OpenGL REQUIRED)
 find_package(glfw3 3.1.2 REQUIRED)
-find_package(OpenCV 4.3.0 REQUIRED COMPONENTS core imgproc highgui imgcodecs calib3d features2d xfeatures2d OPTIONAL_COMPONENTS cudafeatures2d)
+find_package(OpenCV 4.3.0 REQUIRED COMPONENTS core imgproc highgui imgcodecs calib3d features2d video xfeatures2d OPTIONAL_COMPONENTS cudafeatures2d)
 
 if (USE_AZURE_KINECT)
     find_package(k4a 1.3.0 REQUIRED)
@@ -41,6 +43,15 @@ endif ()
 
 if (USE_REALSENSE)
     find_package(realsense2 REQUIRED)
+endif ()
+
+if (USE_ONNXRUNTIME)
+    if (NOT EXISTS "${ONNXRUNTIME_DIR}/include/onnxruntime_cxx_api.h" OR
+        NOT EXISTS "${ONNXRUNTIME_DIR}/lib/onnxruntime.lib")
+        message(FATAL_ERROR
+                "USE_ONNXRUNTIME requires ONNXRUNTIME_DIR to point to an "
+                "ONNX Runtime Windows SDK")
+    endif ()
 endif ()
 
 find_package(OpenMP)

@@ -49,6 +49,7 @@ class RendererGeometry {
     Body *body_ptr = nullptr;
     GLuint vao = 0;
     GLuint vbo = 0;
+    GLuint texture = 0;
     unsigned n_vertices = 0;
   };
 
@@ -79,6 +80,7 @@ class RendererGeometry {
   static void AssembleVertexData(const Body &body,
                                  std::vector<float> *vertex_data);
   static void CreateGLVertexObjects(const std::vector<float> &vertices,
+                                    const Body &body,
                                     RenderDataBody *render_data_body);
   static void DeleteGLVertexObjects(RenderDataBody *render_data_body);
 

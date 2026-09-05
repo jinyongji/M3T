@@ -92,7 +92,11 @@ class Body {
 
   // Calculated value getters
   const std::vector<std::array<int, 3>> &mesh_indices() const;
+  const std::vector<std::array<Eigen::Vector2f, 3>>
+      &mesh_texture_coordinates() const;
   const std::vector<Eigen::Vector3f> &vertices() const;
+  const std::filesystem::path &texture_image_path() const;
+  bool has_texture() const;
   float maximum_body_diameter() const;
 
   // Internal state
@@ -125,7 +129,9 @@ class Body {
 
   // Calculated values
   std::vector<std::array<int, 3>> mesh_indices_{};
+  std::vector<std::array<Eigen::Vector2f, 3>> mesh_texture_coordinates_{};
   std::vector<Eigen::Vector3f> vertices_{};
+  std::filesystem::path texture_image_path_{};
   float maximum_body_diameter_ = 0.0f;
 
   // Internal state

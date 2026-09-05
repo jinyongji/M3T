@@ -143,7 +143,21 @@ const std::vector<std::array<int, 3>> &Body::mesh_indices() const {
   return mesh_indices_;
 }
 
+const std::vector<std::array<Eigen::Vector2f, 3>>
+    &Body::mesh_texture_coordinates() const {
+  return mesh_texture_coordinates_;
+}
+
 const std::vector<Eigen::Vector3f> &Body::vertices() const { return vertices_; }
+
+const std::filesystem::path &Body::texture_image_path() const {
+  return texture_image_path_;
+}
+
+bool Body::has_texture() const {
+  return !texture_image_path_.empty() &&
+         mesh_texture_coordinates_.size() == mesh_indices_.size();
+}
 
 float Body::maximum_body_diameter() const { return maximum_body_diameter_; }
 
@@ -188,8 +202,13 @@ bool Body::LoadMeshData() {
   std::vector<tinyobj::material_t> materials;
   std::string warning;
   std::string error;
+  std::string material_directory{geometry_path_.parent_path().string()};
+  if (!material_directory.empty() &&
+      material_directory.back() != std::filesystem::path::preferred_separator)
+    material_directory += std::filesystem::path::preferred_separator;
   if (!tinyobj::LoadObj(&attributes, &shapes, &materials, &warning, &error,
-                        geometry_path_.string().c_str(), nullptr, true,
+                        geometry_path_.string().c_str(),
+                        material_directory.c_str(), true,
                         false)) {
     std::cerr << "TinyObjLoader failed to load data from " << geometry_path_
               << std::endl;
@@ -209,10 +228,21 @@ bool Body::LoadMeshData() {
 
   // Reserve space
   mesh_indices_.clear();
+  mesh_texture_coordinates_.clear();
+  texture_image_path_.clear();
   size_t n_vertices = 0;
   for (const auto &shape : shapes)
     n_vertices += shape.mesh.num_face_vertices.size();
   mesh_indices_.reserve(n_vertices);
+  mesh_texture_coordinates_.reserve(n_vertices);
+
+  for (const auto &material : materials) {
+    if (!material.diffuse_texname.empty()) {
+      texture_image_path_ =
+          geometry_path_.parent_path() / material.diffuse_texname;
+      break;
+    }
+  }
 
   // Load mesh vertices
   for (const auto &shape : shapes) {
@@ -224,17 +254,26 @@ bool Body::LoadMeshData() {
         continue;
       }
 
-      if (geometry_counterclockwise_) {
-        mesh_indices_.push_back(std::array<int, 3>{
-            shape.mesh.indices[index_offset].vertex_index,
-            shape.mesh.indices[index_offset + 1].vertex_index,
-            shape.mesh.indices[index_offset + 2].vertex_index});
-      } else {
-        mesh_indices_.push_back(std::array<int, 3>{
-            shape.mesh.indices[index_offset + 2].vertex_index,
-            shape.mesh.indices[index_offset + 1].vertex_index,
-            shape.mesh.indices[index_offset].vertex_index});
+      std::array<int, 3> order{0, 1, 2};
+      if (!geometry_counterclockwise_) order = {2, 1, 0};
+      std::array<int, 3> vertex_indices;
+      std::array<Eigen::Vector2f, 3> texture_coordinates;
+      bool valid_texture_coordinates{true};
+      for (int i = 0; i < 3; ++i) {
+        const auto &index{shape.mesh.indices[index_offset + order[i]]};
+        vertex_indices[i] = index.vertex_index;
+        if (index.texcoord_index < 0) {
+          valid_texture_coordinates = false;
+          texture_coordinates[i].setZero();
+        } else {
+          texture_coordinates[i] = Eigen::Vector2f{
+              attributes.texcoords[2 * index.texcoord_index],
+              attributes.texcoords[2 * index.texcoord_index + 1]};
+        }
       }
+      mesh_indices_.push_back(vertex_indices);
+      mesh_texture_coordinates_.push_back(texture_coordinates);
+      if (!valid_texture_coordinates) texture_image_path_.clear();
       index_offset += 3;
     }
   }

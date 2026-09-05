@@ -9,13 +9,16 @@ param(
     [string]$Body = 'all',
 
     [ValidateSet(
-        'all', 'a_regular', 'b_dynamiclight', 'c_noisy',
+        'all', 'first4', 'a_regular', 'b_dynamiclight', 'c_noisy',
         'd_occlusion', 'd_occlusion_modeled'
     )]
     [string]$Sequence = 'all',
 
     [ValidateRange(1, 256)]
     [int]$Threads = [Math]::Min(8, [Environment]::ProcessorCount),
+
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]*$')]
+    [string]$ExperimentName,
 
     [switch]$Visualize,
     [switch]$SkipBuild
@@ -29,6 +32,10 @@ $environmentRoot = 'D:\workspace\_env'
 $outputRoot = 'D:\workspace\_cpp\3DObjectTracking\中间结果文件'
 $buildDirectory = Join-Path $outputRoot 'M3T-offline-build'
 $resultRoot = Join-Path $outputRoot 'RBOT'
+if ($ExperimentName) {
+    $resultRoot = Join-Path (Join-Path $outputRoot 'RBOT_paper_optimization') `
+        $ExperimentName
+}
 $logDirectory = Join-Path $resultRoot 'logs'
 $executable = Join-Path $buildDirectory 'examples\Release\evaluate_rbot_dataset.exe'
 $cmakeExecutable = Join-Path $environmentRoot `
@@ -53,7 +60,6 @@ Assert-PathExists -Path (Join-Path $datasetRoot 'poses_first.txt') `
     -Description 'RBOT 主物体位姿文件'
 Assert-PathExists -Path (Join-Path $datasetRoot 'poses_second.txt') `
     -Description 'RBOT 遮挡物位姿文件'
-Assert-PathExists -Path $cmakeExecutable -Description 'CMake 可执行文件'
 
 Write-Host '=== M3T RBOT 并行评测 ===' -ForegroundColor Cyan
 Write-Host "项目目录 : $projectRoot"
@@ -62,6 +68,7 @@ Write-Host "构建目录 : $buildDirectory"
 Write-Host "评测范围 : body=$Body, sequence=$Sequence"
 
 if (-not $SkipBuild) {
+    Assert-PathExists -Path $cmakeExecutable -Description 'CMake 可执行文件'
     Assert-PathExists -Path (Join-Path $buildDirectory 'CMakeCache.txt') `
         -Description '已配置的 CMake 构建目录'
 
@@ -85,6 +92,9 @@ $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $logPath = Join-Path $logDirectory `
     "rbot_${Body}_${Sequence}_${timestamp}.log"
 $arguments = @($Body, $Sequence)
+if ($ExperimentName) {
+    $arguments += @('--experiment', $ExperimentName)
+}
 if ($Visualize) {
     $arguments += 'visualize'
     Write-Warning '可视化模式会强制串行评测，Threads 参数在该模式下不生效。'
@@ -101,10 +111,17 @@ Write-Host "OpenMP 线程数: $Threads"
 Write-Host "日志文件     : $logPath"
 Write-Host ''
 
+$previousErrorActionPreference = $ErrorActionPreference
 try {
-    & $executable @arguments 2>&1 | Tee-Object -FilePath $logPath
+    # Windows PowerShell 5.1 wraps native stderr in ErrorRecord objects.
+    # Keep warnings in the log, but use the native exit code to judge failure.
+    $ErrorActionPreference = 'Continue'
+    & $executable @arguments 2>&1 |
+        ForEach-Object { $_.ToString() } |
+        Tee-Object -FilePath $logPath -ErrorAction Stop
     $runExitCode = $LASTEXITCODE
 } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
     $env:OMP_NUM_THREADS = $previousThreadCount
     $env:OMP_DYNAMIC = $previousDynamicSetting
 }
