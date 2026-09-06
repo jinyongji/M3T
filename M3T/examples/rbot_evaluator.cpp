@@ -768,6 +768,8 @@ void RBOTEvaluator::SetUpTracker(
   auto camera_ptr{std::make_shared<m3t::LoaderColorCamera>(
       "camera", dataset_directory_ / run_configuration.body_name / "frames",
       kRBOTIntrinsics, run_configuration.sequence_name, 0, 4)};
+  camera_ptr->set_use_noise_adaptive_filtering(use_noise_adaptive_filtering_);
+  camera_ptr->set_use_gaussian_noise_filter(use_gaussian_noise_filter_);
   camera_ptr->SetUp();
 
   // Init Viewer
@@ -933,6 +935,12 @@ void RBOTEvaluator::ExecuteMeasuredTrackingCycle(
   tracker_ptr->UpdateCameras(iteration);
 
   execution_times->calculate_correspondences = 0.0f;
+  // Include image conditioning in the tracking budget, not hidden in I/O.
+  for (const auto &camera : tracker_ptr->camera_ptrs()) {
+    const auto loader = std::dynamic_pointer_cast<m3t::LoaderColorCamera>(camera);
+    if (loader)
+      execution_times->calculate_correspondences += loader->preprocessing_time_us();
+  }
   execution_times->calculate_gradient_and_hessian = 0.0f;
   execution_times->calculate_optimization = 0.0f;
   for (int corr_iteration = 0;
@@ -992,6 +1000,13 @@ void RBOTEvaluator::ExecuteMeasuredTrackingCycle(
 void RBOTEvaluator::CollectDiagnostics(
     const std::shared_ptr<m3t::Tracker> &tracker_ptr,
     FusionDiagnostics *diagnostics) const {
+  for (const auto &camera : tracker_ptr->camera_ptrs()) {
+    const auto loader = std::dynamic_pointer_cast<m3t::LoaderColorCamera>(camera);
+    if (loader) {
+      diagnostics->image_noise_sigma = loader->noise_standard_deviation();
+      diagnostics->image_preprocessing_us = loader->preprocessing_time_us();
+    }
+  }
   const auto &optimizer_ptr{tracker_ptr->optimizer_ptrs()[0]};
   const auto &modalities{optimizer_ptr->root_link_ptr()->modality_ptrs()};
   for (const auto &modality_ptr : modalities) {
@@ -1008,6 +1023,8 @@ void RBOTEvaluator::CollectDiagnostics(
           region_ptr->mean_absolute_standardized_residual();
       diagnostics->region.auxiliary_mean =
           region_ptr->mean_measured_variance();
+      diagnostics->region_visibility_evidence = region_ptr->visibility_evidence();
+      diagnostics->region_visibility_activation = region_ptr->visibility_activation();
     } else if (auto texture_ptr =
                    std::dynamic_pointer_cast<m3t::TextureModality>(
                        modality_ptr)) {
@@ -1268,7 +1285,8 @@ void RBOTEvaluator::SaveDiagnostics(const std::vector<Result> &results,
          "video_ecc_reliability_weight,"
          "selective_recovery,dual_hypothesis_log_odds,"
          "dual_hypothesis_selected_disk,dual_hypothesis_disk_success,"
-         "dual_hypothesis_orb_success\n";
+         "dual_hypothesis_orb_success,image_noise_sigma,image_preprocessing_us,"
+         "region_visibility_evidence,region_visibility_activation\n";
   ofs << std::setprecision(9);
   for (const auto &result : results) {
     const auto &region{result.fusion_diagnostics.region};
@@ -1325,6 +1343,10 @@ void RBOTEvaluator::SaveDiagnostics(const std::vector<Result> &results,
         << int(result.fusion_diagnostics.dual_hypothesis_selected_disk)
         << ',' << result.fusion_diagnostics.dual_hypothesis_disk_success
         << ',' << result.fusion_diagnostics.dual_hypothesis_orb_success
+        << ',' << result.fusion_diagnostics.image_noise_sigma
+        << ',' << result.fusion_diagnostics.image_preprocessing_us
+        << ',' << result.fusion_diagnostics.region_visibility_evidence
+        << ',' << result.fusion_diagnostics.region_visibility_activation
         << '\n';
   }
 }

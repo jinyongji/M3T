@@ -5,6 +5,9 @@
 
 #include <opencv2/core/eigen.hpp>
 
+#include <array>
+#include <chrono>
+
 namespace m3t {
 
 LoaderColorCamera::LoaderColorCamera(
@@ -92,9 +95,70 @@ bool LoaderColorCamera::UpdateImage(bool synchronized) {
     return false;
   }
 
+  unfiltered_image_ = image_;
+  FilterImageIfRequested();
   load_index_++;
   SaveImageIfDesired();
   return true;
+}
+
+void LoaderColorCamera::FilterImageIfRequested() {
+  preprocessing_time_us_ = 0.0f;
+  noise_standard_deviation_ = 0.0f;
+  if (!use_noise_adaptive_filtering_ || image_.type() != CV_8UC3 ||
+      image_.rows < 2 || image_.cols < 2)
+    return;
+  const auto begin = std::chrono::steady_clock::now();
+
+  // Robust Haar high-pass MAD: (a-b-c+d)/2 has unit noise gain. A sparse
+  // histogram avoids sorting and rejects isolated texture/contour responses.
+  std::array<int, 511> histogram{};
+  int samples = 0;
+  for (int v = 0; v + 1 < image_.rows; v += 4) {
+    const auto *row0 = image_.ptr<cv::Vec3b>(v);
+    const auto *row1 = image_.ptr<cv::Vec3b>(v + 1);
+    for (int u = 0; u + 1 < image_.cols; u += 4) {
+      for (int c = 0; c < 3; ++c) {
+        const int response = int(row0[u][c]) - int(row0[u + 1][c]) -
+                             int(row1[u][c]) + int(row1[u + 1][c]);
+        ++histogram[size_t(std::abs(response))];
+        ++samples;
+      }
+    }
+  }
+  int cumulative = 0;
+  for (size_t i = 0; i < histogram.size(); ++i) {
+    cumulative += histogram[i];
+    if (cumulative >= (samples + 1) / 2) {
+      noise_standard_deviation_ = 0.7413f * float(i);
+      break;
+    }
+  }
+
+  // Local Wiener shrinkage preserves high-variance structures and denoises
+  // flat surfaces. Clean images bypass it, keeping their original evidence.
+  if (noise_standard_deviation_ > 4.0f && use_gaussian_noise_filter_) {
+    cv::Mat filtered;
+    cv::GaussianBlur(image_, filtered, cv::Size{5, 5}, 1.0);
+    image_ = std::move(filtered);
+  } else if (noise_standard_deviation_ > 4.0f) {
+    cv::Mat image_float, mean, second_moment, variance, gain, restored;
+    image_.convertTo(image_float, CV_32F);
+    cv::boxFilter(image_float, mean, -1, cv::Size{5, 5});
+    cv::sqrBoxFilter(image_float, second_moment, CV_32F, cv::Size{5, 5});
+    variance = second_moment - mean.mul(mean);
+    const float noise_variance =
+        noise_standard_deviation_ * noise_standard_deviation_;
+    cv::max(variance, noise_variance, variance);
+    cv::divide(noise_variance, variance, gain);
+    gain = cv::Scalar::all(1.0) - gain;
+    restored = mean + gain.mul(image_float - mean);
+    cv::Mat filtered;
+    restored.convertTo(filtered, CV_8U);
+    image_ = std::move(filtered);
+  }
+  preprocessing_time_us_ = float(std::chrono::duration<double, std::micro>(
+      std::chrono::steady_clock::now() - begin).count());
 }
 
 const std::filesystem::path &LoaderColorCamera::load_directory() const {

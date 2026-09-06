@@ -1,5 +1,10 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
 
+# Small offline regression check; no GTest, camera SDK or model weights needed.
+# Its caller supplies a fresh output directory for synthetic images.
+add_executable(test_offline_conditioning EXCLUDE_FROM_ALL offline_conditioning_test.cpp)
+target_link_libraries(test_offline_conditioning PRIVATE m3t)
+
 # Options
 # =============================================================================
 if (USE_GTEST)

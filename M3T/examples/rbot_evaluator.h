@@ -75,6 +75,10 @@ class RBOTEvaluator {
   };
 
   struct FusionDiagnostics {
+    float image_noise_sigma = 0.0f;
+    float image_preprocessing_us = 0.0f;
+    float region_visibility_evidence = 1.0f;
+    float region_visibility_activation = 0.0f;
     ModalityDiagnostics region;
     ModalityDiagnostics texture;
     float step_cosine = 0.0f;
@@ -133,6 +137,10 @@ class RBOTEvaluator {
   void set_rotation_error_threshold(float rotation_error_threshold);
   void set_run_sequentially(bool run_sequentially);
   void set_visualize_all_results(bool visualize_all_results);
+  void set_use_noise_adaptive_filtering(bool enabled) {
+    use_noise_adaptive_filtering_ = enabled;
+  }
+  void set_use_gaussian_noise_filter(bool enabled) { use_gaussian_noise_filter_ = enabled; }
   void set_use_constant_velocity_prediction(
       bool use_constant_velocity_prediction);
   void set_use_reliability_weighted_fusion(
@@ -275,6 +283,8 @@ class RBOTEvaluator {
   bool run_sequentially_ = true;
   bool visualize_all_results_ = true;
   bool use_constant_velocity_prediction_ = false;
+  bool use_noise_adaptive_filtering_ = false;
+  bool use_gaussian_noise_filter_ = false;
   bool use_reliability_weighted_fusion_ = false;
   bool use_directional_temporal_prior_ = false;
   bool use_windowed_temporal_prior_ = false;

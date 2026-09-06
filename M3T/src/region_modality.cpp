@@ -380,14 +380,18 @@ bool RegionModality::StartModality(int iteration, int corr_iteration) {
   if (!IsSetup()) return false;
 
   first_iteration_ = iteration;
+  visibility_reference_ = 0.0f;
+  visibility_activation_ = 0.0f;
   PrecalculatePoseVariables();
 
   // Initialize histograms
+  histograms_initialized_ = false;
   bool handle_occlusions = n_unoccluded_iterations_ == 0;
   if (!use_shared_color_histograms_) color_histograms_ptr_->ClearMemory();
   AddLinePixelColorsToTempHistograms(handle_occlusions);
   if (!use_shared_color_histograms_)
     color_histograms_ptr_->InitializeHistograms();
+  histograms_initialized_ = true;
   return true;
 }
 
@@ -461,9 +465,31 @@ bool RegionModality::CalculateCorrespondences(int iteration,
 
       CalculateDistributionMoments(data_line.distribution, &data_line.mean,
                                    &data_line.measured_variance);
+      if (use_visibility_consensus_)
+        data_line.visibility_probability = CalculateLineVisibilityProbability(
+            segment_probabilities_f, segment_probabilities_b);
       data_lines_.push_back(std::move(data_line));
     }
     if (data_lines_.size() >= min_n_unoccluded_lines_) break;
+  }
+  if (use_visibility_consensus_ && !data_lines_.empty()) {
+    visibility_evidence_ = 0.0f;
+    for (const auto &line : data_lines_)
+      visibility_evidence_ += line.visibility_probability;
+    visibility_evidence_ /= float(data_lines_.size());
+    if (visibility_reference_ == 0.0f)
+      visibility_reference_ = visibility_evidence_;
+    // Relative loss of evidence, not intrinsically weak object contrast,
+    // activates the visibility mixture. The reference is causal and reset
+    // with the tracker; it never uses poses or success labels from evaluation.
+    visibility_activation_ = std::clamp(
+        (visibility_reference_ - visibility_evidence_ - 0.08f) / 0.12f,
+        0.0f, 1.0f);
+    for (auto &line : data_lines_)
+      line.visibility_probability =
+          visibility_weight_contours_
+              ? 1.0f - visibility_activation_ * (1.0f - line.visibility_probability)
+              : 1.0f;
   }
   return true;
 }
@@ -558,7 +584,7 @@ bool RegionModality::CalculateGradientAndHessian(int iteration,
         ddelta_cs_dtranslation;
 
     // Calculate weight
-    float weight = min_expected_variance_ /
+    float weight = data_line.visibility_probability * min_expected_variance_ /
                    (data_line.normal_component_to_scale *
                     data_line.normal_component_to_scale * variance_);
 
@@ -591,6 +617,10 @@ bool RegionModality::VisualizeOptimization(int save_idx) {
 
 bool RegionModality::CalculateResults(int iteration) {
   if (!IsSetup()) return false;
+
+  if (use_visibility_consensus_ && visibility_activation_ == 0.0f)
+    visibility_reference_ = 0.95f * visibility_reference_ +
+                            0.05f * visibility_evidence_;
 
   // Calculate histograms
   if (!use_shared_color_histograms_) color_histograms_ptr_->ClearMemory();
@@ -1127,11 +1157,51 @@ void RegionModality::PrecalculateIterationDependentVariables(
   variance_ = powf(standard_deviation, 2.0f);
 }
 
+float RegionModality::CalculateLineVisibilityProbability(
+    const std::vector<float> &foreground,
+    const std::vector<float> &background) const {
+  // Compare an actual F->B change point against homogeneous F/B and unknown
+  // appearance. The normalized displacement distribution discards this model
+  // evidence; retain it as a separate visibility responsibility instead.
+  const size_t n = foreground.size();
+  if (n == 0 || background.size() != n) return 1.0f;
+  std::vector<float> prefix_f(n + 1, 0.0f), prefix_b(n + 1, 0.0f);
+  for (size_t i = 0; i < n; ++i) {
+    prefix_f[i + 1] = prefix_f[i] +
+                      std::log(0.05f + 0.90f * foreground[i]);
+    prefix_b[i + 1] = prefix_b[i] +
+                      std::log(0.05f + 0.90f * background[i]);
+  }
+  const int first = std::max(1, function_length_ / 2);
+  const int last = std::min(int(n) - 1, first + distribution_length_ - 1);
+  if (last < first) return 1.0f;
+  float maximum = -std::numeric_limits<float>::infinity();
+  for (int split = first; split <= last; ++split)
+    maximum = std::max(maximum, prefix_f[split] + prefix_b[n] - prefix_b[split]);
+  float evidence = 0.0f;
+  for (int split = first; split <= last; ++split)
+    evidence += std::exp(prefix_f[split] + prefix_b[n] - prefix_b[split] - maximum);
+  const float boundary = maximum + std::log(evidence / float(last - first + 1));
+  const float unknown = float(n) * std::log(0.5f);
+  const float null_max = std::max({prefix_f[n], prefix_b[n], unknown});
+  const float null_evidence = null_max + std::log(
+      (std::exp(prefix_f[n] - null_max) + std::exp(prefix_b[n] - null_max) +
+       std::exp(unknown - null_max)) / 3.0f);
+  const float log_odds = std::clamp(boundary - null_evidence + std::log(9.0f),
+                                  -20.0f, 20.0f);
+  return std::max(0.05f, 1.0f / (1.0f + std::exp(-log_odds)));
+}
+
 void RegionModality::AddLinePixelColorsToTempHistograms(
     bool handle_occlusions) {
   const cv::Mat &image{color_camera_ptr_->image()};
   const RegionModel::View *view;
   region_model_ptr_->GetClosestView(body2camera_pose_, &view);
+  std::vector<float> visibility_f, visibility_b;
+  if (use_visibility_consensus_ && histograms_initialized_) {
+    visibility_f.resize(line_length_in_segments_);
+    visibility_b.resize(line_length_in_segments_);
+  }
 
   // Check if body is visible and fetch images from renderers
   bool body_visible_depth;
@@ -1212,6 +1282,14 @@ void RegionModality::AddLinePixelColorsToTempHistograms(
     // Define steps and projected considered line lengths
     Eigen::Vector2f normal{
         (body2camera_rotation_xy_ * data_point.normal_f_body).normalized()};
+    if (use_visibility_consensus_ && histograms_initialized_ &&
+        (visibility_local_memory_ || visibility_activation_ > 0.0f)) {
+      float normal_scale, delta;
+      if (!CalculateSegmentProbabilities(center_u, center_v, normal(0), normal(1),
+              &visibility_f, &visibility_b, &normal_scale, &delta) ||
+          CalculateLineVisibilityProbability(visibility_f, visibility_b) < 0.5f)
+        continue;
+    }
     float u_step, v_step;
     int projected_length_f, projected_length_b;
     float abs_normal_u = std::fabs(normal(0));

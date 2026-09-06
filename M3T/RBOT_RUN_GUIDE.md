@@ -22,7 +22,7 @@ D:\workspace_cpp\3DObjectTracking\M3T
 
 ## 2. 推荐运行方式
 
-**想测试本轮优化效果，请直接使用第 10.1 节的 DISK 优化命令。** `run_rbot_first4.ps1` 和 `run_rbot_parallel.ps1` 默认仍运行 baseline。编译最新源码不等于启用优化算法，必须在运行时传入对应开关。
+**想测试本轮版本，请使用第 11 节的 `run_rbot_final.ps1`，默认已启用筛选后保留的噪声改进；遮挡候选仅供消融、默认关闭。** 第 10 节保留上一轮 `release v1` 的 DISK 命令，用于对照。`run_rbot_first4.ps1` 和 `run_rbot_parallel.ps1` 默认仍运行 baseline，编译最新源码不等于启用优化算法。
 
 以下脚本支持 Windows PowerShell 5.1（`powershell`）和 PowerShell 7（`pwsh`）。可以先进入源码目录：
 
@@ -301,7 +301,7 @@ $text = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)
 - 并行运行时各配置的控制台输出顺序可能交错，这是正常现象。
 - 每个序列使用第 0 帧初始化，并评测后续 1000 帧。
 
-## 10. 本轮优化版本（前 4 组序列 / regular）
+## 10. 上一轮 release v1 DISK 配置（用于对照）
 
 推荐使用单分支 DISK 优化配置进行正常 RBOT 评测。它与 baseline 使用同一份可执行文件，但需要显式启用运动预测、可靠性加权融合、方向性时序先验和 DISK 模型纹理匹配。
 
@@ -437,3 +437,122 @@ D:\workspace\_cpp\3DObjectTracking\中间结果文件\RBOT_paper_optimization\FI
 ```
 
 注意：最后一个开关会根据每个候选各自的 RBOT 成功标签进行独立重置，因此它是候选互补的 benchmark 上限/消融，不是无真值在线精度。论文中必须明确这个限定。
+
+## 11. 最新 noisy / occlusion 改进：四变量测试脚本
+
+入口：`D:\workspace_cpp\3DObjectTracking\M3T\run_rbot_final.ps1`。它自动编译，默认启用上一轮 DISK 配置，加上本轮的区域分支噪声条件化和纹理原图输入。遮挡记忆门控全量测试有回退，因此仅保留为实验选项，**默认关闭**。不会启用双假设独立真值重置或第 5 组 modeled occlusion。这里 `final` 表示本轮交付配置，不表示已经达到 regular 精度或投稿指标。
+
+### 11.1 直接运行最终版本的前 4 组
+
+```powershell
+cd D:\workspace_cpp\3DObjectTracking\M3T
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_rbot_final.ps1
+```
+
+或者从任意目录使用绝对路径：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File 'D:\workspace_cpp\3DObjectTracking\M3T\run_rbot_final.ps1' `
+  -Body all -Sequence first4 -Variant final
+```
+
+这是 **18 个对象 × 4 组序列，共 72 个配置**。采用串行 GPU 评测，避免并发推理任务争用资源；不是 baseline。源码无变化时 CMake 会进行增量构建，无需手动编译或安装新环境。
+
+### 11.2 四个控制变量
+
+| 参数 | 默认值 | 可选值 / 用途 |
+|---|---|---|
+| `Body` | `all` | 全部对象或第 5 节列出的单个对象 |
+| `Sequence` | `first4` | 四组全部，或 `a_regular`、`b_dynamiclight`、`c_noisy`、`d_occlusion` |
+| `Variant` | `final` | 噪声改进默认版、`release-v1`、`visibility-only`、`combined-experimental` |
+| `Visualize` | 关闭 | 加上 `-Visualize` 显示渲染窗口 |
+
+四个算法变体都保留单分支 DISK、运动预测、可靠性融合和方向时间先验：
+
+- `release-v1`：关闭本轮新增模块，作为算法对照；不是检出旧提交。
+- `final`：`--noise-region-only`，图像估计噪声，必要时仅对区域分支使用 Gaussian，纹理分支保留原始图像；不启用新增遮挡门控。
+- `visibility-only`：实验项 `--visibility-memory-local`，以逐线边界证据保护颜色直方图更新，不改变轮廓优化权重。
+- `combined-experimental`：同时启用噪声处理和局部记忆门控，用于保留失败候选和完整 2×2 消融，**不是推荐部署版本**。较早实验使用的 `--noise-gaussian --visibility-aware` 也不是默认配置。
+
+各组使用相同算法规则，不根据序列名称选择滤波强度或遮挡参数。终端会打印实际传给评测程序的命令，以便确认优化开关已打开。
+
+### 11.3 先小样本，再完整评测
+
+先检查单个困难对象：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File .\run_rbot_final.ps1 -Body glue -Sequence c_noisy -Variant final
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File .\run_rbot_final.ps1 -Body bakingsoda -Sequence d_occlusion -Variant final
+```
+
+分别评测四组，每条命令都会创建独立结果目录：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_rbot_final.ps1 -Sequence a_regular
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_rbot_final.ps1 -Sequence b_dynamiclight
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_rbot_final.ps1 -Sequence c_noisy
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_rbot_final.ps1 -Sequence d_occlusion
+```
+
+对同一对象/序列做模块消融：
+
+```powershell
+foreach ($variant in @('release-v1','final','visibility-only','combined-experimental')) {
+  powershell -NoProfile -ExecutionPolicy Bypass `
+    -File .\run_rbot_final.ps1 -Body glue -Sequence c_noisy -Variant $variant
+  if ($LASTEXITCODE -ne 0) { throw "Evaluation failed: $variant" }
+}
+```
+
+可视化最终版本：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File .\run_rbot_final.ps1 -Body ape -Sequence d_occlusion -Visualize
+```
+
+可视化会增加运行开销，不用于 FPS 对比。不要同时启动多个脚本竞争同一构建目录、GPU 或模型缓存。
+
+### 11.4 输出与结果口径
+
+```text
+D:\workspace\_cpp\3DObjectTracking\中间结果文件\RBOT_paper_optimization\N_final_<变体>_<对象>_<序列>_<时间戳>_<后缀>\
+  logs\build.log
+  logs\evaluation.log
+  results\results_<序列>_<对象>.txt
+  results\results_all_sequences_all_bodies.txt
+  diagnostics\diagnostics_<序列>_<对象>.csv
+  summary.json
+  run_manifest.json
+  source_changes.patch
+  source_untracked\
+  CMakeCache_snapshot.txt
+  runner_snapshot.ps1
+```
+
+- `summary.json`：本次每组序列的对象数量、平均成功率、跟踪周期耗时及其换算 FPS。
+- `run_manifest.json`：实际参数、程序/模型哈希、Git 信息、运行状态、整个评测进程的墙钟时间与吞吐率。确认 `Status` 为 `complete` 后再使用成绩。
+- 新增预处理耗时已计入跟踪周期；但周期 FPS 不包含所有读取、初始化和诊断输出，不能冒充端到端 FPS。`WholeJobFramesPerSecond` 则包含这些评测进程开销。
+- 默认脚本仍严格检查非零退出码、1000 帧连续诊断和汇总/逐帧成功率一致性。PowerShell 5.1 普通 stderr 警告不会提前结束测试。评测阶段失败会记录 `failed`；若编译阶段就失败，查看 `logs\build.log`，此时不会产生完成状态或成绩。
+- 自动读取 `CMakeCache.txt` 中的 `CMAKE_COMMAND`，使用原先配置工程的 CMake，避免 Visual Studio / vcpkg 的不同 CMake 版本在重新生成时混用模块；若构建缓存指向其他源码目录则拒绝运行。
+- 遮挡实验没有得到可靠净收益，所以默认配置保持旧版在干净图像上的跟踪规则。不能用困难对象的小样本提升宣称完整 noisy / occlusion 已达到 regular 水平。
+
+方法、文献边界与筛选记录见 `D:\workspace_cpp\3DObjectTracking\M3T\doc\RBOT_NOISE_OCCLUSION.md`。
+
+### 11.5 已验证的结果与限制
+
+本轮默认版完成 noisy 的全部 18 对象、共 18000 帧：平均成功率 **95.2167%**，旧版为 **91.9278%**；周期平均 **47.45 FPS**，包含加载、初始化和诊断输出的整次评测吞吐率为 **34.15 FPS**。这次运行通过了脚本完整性检查，结果在：
+
+```text
+D:\workspace\_cpp\3DObjectTracking\中间结果文件\RBOT_paper_optimization\N_final_final_all_c_noisy_20260906_000844_414_627b5ec9
+```
+
+仍有对象级回退，也未达到 regular 平均精度或 98.5% 目标。遮挡门控的全量消融出现回退，默认关闭，因此不要把本轮描述成“遮挡问题已解决”。默认版的四组完整新成绩需用第 11.1 节命令生成，不要用旧目录中的成绩替代。
+
+另已从项目外目录实跑 `-Body ape -Sequence first4`：4 组结果均完整，regular / dynamiclight / occlusion 分别为 99.6% / 99.2% / 97.7%，与旧版这个对象一致。这只是一对象的流程及回归检查，不是 18 对象宏平均。
+
+每次运行请查看终端打印的新结果目录及 `run_manifest.json` 的实际参数；旧 `RBOT\results` 不会被该脚本覆盖。早期 `N_final_*` 实验可能用了不同开关，不能仅凭文件夹名中的 `final` 判断是否为当前配置。

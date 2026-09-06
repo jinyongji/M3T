@@ -15,4 +15,5 @@ doc/html
 !.clang-format
 !run_rbot_parallel.ps1
 !run_rbot_first4.ps1
+!run_rbot_final.ps1
 !RBOT_RUN_GUIDE.md

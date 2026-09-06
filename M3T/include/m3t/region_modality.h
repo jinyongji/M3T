@@ -162,6 +162,7 @@ class RegionModality : public Modality {
     std::vector<float> distribution{};
     float mean = 0.0f;
     float measured_variance = 0.0f;
+    float visibility_probability = 1.0f;
   };
 
  public:
@@ -245,6 +246,17 @@ class RegionModality : public Modality {
   void set_visualization_min_depth(float visualization_min_depth);
   void set_visualization_max_depth(float visualization_max_depth);
   void set_collect_diagnostics(bool collect_diagnostics);
+  void set_use_visibility_consensus(bool enabled) {
+    use_visibility_consensus_ = enabled;
+  }
+  float visibility_evidence() const { return visibility_evidence_; }
+  float visibility_activation() const { return visibility_activation_; }
+  void set_visibility_weight_contours(bool enabled) {
+    visibility_weight_contours_ = enabled;
+  }
+  void set_visibility_local_memory(bool enabled) {
+    visibility_local_memory_ = enabled;
+  }
 
   // Main methods
   bool StartModality(int iteration, int corr_iteration) override;
@@ -350,6 +362,9 @@ class RegionModality : public Modality {
 
   // Helper methods for histogram calculation
   void AddLinePixelColorsToTempHistograms(bool handle_occlusions);
+  float CalculateLineVisibilityProbability(
+      const std::vector<float> &foreground,
+      const std::vector<float> &background) const;
   void DynamicRegionDistance(float center_u, float center_v, float normal_u,
                              float normal_v, float *dynamic_foreground_distance,
                              float *dynamic_background_distance) const;
@@ -466,6 +481,13 @@ class RegionModality : public Modality {
   bool visualize_points_result_ = false;
   bool visualize_points_histogram_image_result_ = false;
   bool collect_diagnostics_ = false;
+  bool use_visibility_consensus_ = false;
+  bool visibility_weight_contours_ = true;
+  bool visibility_local_memory_ = false;
+  bool histograms_initialized_ = false;
+  float visibility_reference_ = 0.0f;
+  float visibility_evidence_ = 1.0f;
+  float visibility_activation_ = 0.0f;
 
   // Parameters for visualizations
   float visualization_min_depth_ = 0.0f;

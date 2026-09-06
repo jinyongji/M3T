@@ -47,6 +47,15 @@ class LoaderColorCamera : public ColorCamera {
   void set_image_name_post(const std::string &image_name_post);
   void set_load_image_type(const std::string &load_image_type);
 
+  // Image-only noise estimation; independent of dataset names and poses.
+  void set_use_noise_adaptive_filtering(bool enabled) {
+    use_noise_adaptive_filtering_ = enabled;
+  }
+  void set_use_gaussian_noise_filter(bool enabled) { use_gaussian_noise_filter_ = enabled; }
+  float noise_standard_deviation() const { return noise_standard_deviation_; }
+  float preprocessing_time_us() const { return preprocessing_time_us_; }
+  const cv::Mat &unfiltered_image() const { return unfiltered_image_; }
+
   // Main method
   bool UpdateImage(bool synchronized) override;
 
@@ -61,6 +70,7 @@ class LoaderColorCamera : public ColorCamera {
  private:
   // Helper method
   bool LoadMetaData();
+  void FilterImageIfRequested();
 
   // Data
   std::filesystem::path load_directory_{};
@@ -69,6 +79,11 @@ class LoaderColorCamera : public ColorCamera {
   int n_leading_zeros_ = 0;
   std::string image_name_post_ = "";
   std::string load_image_type_ = "png";
+  bool use_noise_adaptive_filtering_ = false;
+  bool use_gaussian_noise_filter_ = false;
+  float noise_standard_deviation_ = 0.0f;
+  float preprocessing_time_us_ = 0.0f;
+  cv::Mat unfiltered_image_;
 };
 
 /**

@@ -33,6 +33,12 @@ int main(int argc, char *argv[]) {
   bool collect_diagnostics{false};
   bool run_sequentially{false};
   bool use_constant_velocity_prediction{false};
+  bool use_noise_adaptive_filtering{false};
+  bool use_gaussian_noise_filter{false};
+  bool use_unfiltered_texture_observations{false};
+  bool use_visibility_consensus{false};
+  bool visibility_memory_only{false};
+  bool visibility_local_memory{false};
   bool use_optical_flow_tracking{false};
   bool use_region_modality{true};
   bool use_texture_modality{true};
@@ -84,6 +90,24 @@ int main(int argc, char *argv[]) {
       run_sequentially = true;
     } else if (argument == "--constant-velocity") {
       use_constant_velocity_prediction = true;
+    } else if (argument == "--noise-aware") {
+      use_noise_adaptive_filtering = true;
+    } else if (argument == "--visibility-aware") {
+      use_visibility_consensus = true;
+    } else if (argument == "--visibility-memory") {
+      use_visibility_consensus = true;
+      visibility_memory_only = true;
+    } else if (argument == "--visibility-memory-local") {
+      use_visibility_consensus = true;
+      visibility_memory_only = true;
+      visibility_local_memory = true;
+    } else if (argument == "--noise-gaussian") {
+      use_noise_adaptive_filtering = true;
+      use_gaussian_noise_filter = true;
+    } else if (argument == "--noise-region-only") {
+      use_noise_adaptive_filtering = true;
+      use_gaussian_noise_filter = true;
+      use_unfiltered_texture_observations = true;
     } else if (argument == "--optical-flow") {
       use_optical_flow_tracking = true;
     } else if (argument == "--region-only") {
@@ -172,7 +196,11 @@ int main(int argc, char *argv[]) {
                  "[a_regular|b_dynamiclight|c_noisy|d_occlusion|"
                  "d_occlusion_modeled|first4|all] [visualize] "
                  "[--experiment NAME] [--diagnostics] [--sequential] "
-                 "[--constant-velocity] [--optical-flow]"
+                 "[--constant-velocity] [--noise-aware] [--noise-gaussian]"
+                 " [--noise-region-only]"
+                 " [--visibility-aware] [--visibility-memory]"
+                 " [--visibility-memory-local]"
+                 " [--optical-flow]"
                  " [--region-only|--texture-only]"
                  " [--sift]"
                  " [--reliability-fusion]"
@@ -275,6 +303,9 @@ int main(int argc, char *argv[]) {
   RBOTEvaluator evaluator{"evaluator", dataset_directory, external_directory,
                           body_names,  sequence_names,    sequence_occlusions};
   evaluator.set_region_modality_setter([&](auto r) {
+    r->set_use_visibility_consensus(use_visibility_consensus);
+    r->set_visibility_weight_contours(!visibility_memory_only);
+    r->set_visibility_local_memory(visibility_local_memory);
     r->set_n_lines_max(200);
     r->set_use_adaptive_coverage(false);
     r->set_min_continuous_distance(3.0f);
@@ -295,6 +326,7 @@ int main(int argc, char *argv[]) {
     r->set_modeled_occlusion_threshold(0.03f);
   });
   evaluator.set_texture_modality_setter([&](auto t) {
+    t->set_use_unfiltered_observations(use_unfiltered_texture_observations);
     t->set_descriptor_type(
         use_sift_descriptor ? m3t::TextureModality::DescriptorType::SIFT
                             : m3t::TextureModality::DescriptorType::ORB);
@@ -377,6 +409,8 @@ int main(int argc, char *argv[]) {
     t->set_n_corr_iterations(7);
   });
   evaluator.set_run_sequentially(run_sequentially);
+  evaluator.set_use_noise_adaptive_filtering(use_noise_adaptive_filtering);
+  evaluator.set_use_gaussian_noise_filter(use_gaussian_noise_filter);
   evaluator.set_visualize_all_results(visualize);
   evaluator.set_use_constant_velocity_prediction(
       use_constant_velocity_prediction);

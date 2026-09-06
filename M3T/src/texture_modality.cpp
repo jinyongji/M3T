@@ -3,6 +3,7 @@
 // German Aerospace Center (DLR)
 
 #include <m3t/texture_modality.h>
+#include <m3t/loader_camera.h>
 
 namespace m3t {
 
@@ -1554,7 +1555,7 @@ void TextureModality::DetectAndComputeCorrKeypoints() {
   cv::Rect region_of_interest;
   float scale;
   if (!CalculateScaleAndRegionOfInterest(&region_of_interest, &scale)) return;
-  cv::cvtColor(color_camera_ptr_->image(), focused_image, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(ObservedImage(), focused_image, cv::COLOR_BGR2GRAY);
   cv::resize(focused_image(region_of_interest), focused_image, cv::Size(),
              scale, scale);
 
@@ -1578,10 +1579,20 @@ void TextureModality::DetectAndComputeCorrKeypoints() {
   }
 }
 
+const cv::Mat &TextureModality::ObservedImage() const {
+  if (use_unfiltered_observations_) {
+    const auto loader =
+        std::dynamic_pointer_cast<LoaderColorCamera>(color_camera_ptr_);
+    if (loader && !loader->unfiltered_image().empty())
+      return loader->unfiltered_image();
+  }
+  return color_camera_ptr_->image();
+}
+
 void TextureModality::ComputeOpticalFlowCorrespondences() {
   data_points_.clear();
   cv::Mat current_gray;
-  cv::cvtColor(color_camera_ptr_->image(), current_gray, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(ObservedImage(), current_gray, cv::COLOR_BGR2GRAY);
   for (size_t i = 0; i < gray_images_keyframes_.size(); ++i) {
     if (gray_images_keyframes_[i].empty() ||
         image_points_keyframes_[i].empty())
@@ -1810,7 +1821,7 @@ void TextureModality::ComputeModelTextureCorrespondences() {
   float current_scale;
   if (!CalculateScaleAndRegionOfInterest(&current_roi, &current_scale)) return;
   cv::Mat current_gray;
-  cv::cvtColor(color_camera_ptr_->image(), current_gray, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(ObservedImage(), current_gray, cv::COLOR_BGR2GRAY);
   cv::resize(current_gray(current_roi), current_gray, cv::Size(), current_scale,
              current_scale);
   if (!model_texture_debug_directory_.empty() &&
@@ -1941,7 +1952,7 @@ void TextureModality::ComputeDiskModelTextureCorrespondences() {
   cv::Rect current_roi;
   float unused_scale;
   if (!CalculateScaleAndRegionOfInterest(&current_roi, &unused_scale)) return;
-  const cv::Mat current_crop{color_camera_ptr_->image()(current_roi)};
+  const cv::Mat current_crop{ObservedImage()(current_roi)};
   std::vector<cv::KeyPoint> current_keypoints;
   cv::Mat current_descriptors;
   if (!disk_feature_extractor_->DetectAndCompute(
@@ -2219,7 +2230,7 @@ void TextureModality::ComputeModelPhotometricData() {
             });
 
   cv::Mat measured_gray_8u;
-  cv::cvtColor(color_camera_ptr_->image(), measured_gray_8u,
+  cv::cvtColor(ObservedImage(), measured_gray_8u,
                cv::COLOR_BGR2GRAY);
   const float corner_u{textured_renderer_ptr_->corner_u()};
   const float corner_v{textured_renderer_ptr_->corner_v()};
@@ -2338,7 +2349,7 @@ void TextureModality::ComputeModelContourData() {
             });
 
   cv::Mat measured_gray;
-  cv::cvtColor(color_camera_ptr_->image(), measured_gray, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(ObservedImage(), measured_gray, cv::COLOR_BGR2GRAY);
   cv::Mat measured_gradient_x;
   cv::Mat measured_gradient_y;
   cv::Sobel(measured_gray, measured_gradient_x, CV_32F, 1, 0, 3, 0.125);
@@ -2418,7 +2429,7 @@ void TextureModality::ComputeModelEccData() {
             cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size{7, 7}));
 
   cv::Mat measured_gray;
-  cv::cvtColor(color_camera_ptr_->image(), measured_gray, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(ObservedImage(), measured_gray, cv::COLOR_BGR2GRAY);
   cv::Mat measured_focused;
   const float inverse_scale{1.0f / textured_renderer_ptr_->scale()};
   const cv::Mat focus_mapping{
@@ -2562,7 +2573,7 @@ float TextureModality::ModelTextureGradientCorrelation() {
   if (cv::countNonZero(mask) < 30) return -1.0f;
 
   cv::Mat measured_gray;
-  cv::cvtColor(color_camera_ptr_->image(), measured_gray, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(ObservedImage(), measured_gray, cv::COLOR_BGR2GRAY);
   cv::Mat measured_focused;
   const float inverse_scale{1.0f / textured_renderer_ptr_->scale()};
   const cv::Mat focus_mapping{
@@ -2653,7 +2664,7 @@ void TextureModality::ComputeVideoEccKeyframe() {
     return;
 
   cv::Mat gray_image;
-  cv::cvtColor(color_camera_ptr_->image(), gray_image, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(ObservedImage(), gray_image, cv::COLOR_BGR2GRAY);
   cv::resize(gray_image(region_of_interest), video_ecc_keyframe_image_,
              cv::Size{focused_image_size_, focused_image_size_});
   cv::equalizeHist(video_ecc_keyframe_image_, video_ecc_keyframe_image_);
@@ -2742,7 +2753,7 @@ void TextureModality::ComputeVideoEccCorrespondences() {
   float unused_scale;
   if (!CalculateScaleAndRegionOfInterest(&current_roi, &unused_scale)) return;
   cv::Mat current_gray;
-  cv::cvtColor(color_camera_ptr_->image(), current_gray, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(ObservedImage(), current_gray, cv::COLOR_BGR2GRAY);
   cv::resize(current_gray(current_roi), current_gray,
              video_ecc_keyframe_image_.size());
   cv::equalizeHist(current_gray, current_gray);
@@ -2894,7 +2905,7 @@ void TextureModality::ComputeKeyframeData() {
       image_points_keyframe.push_back(keypoints_[index].pt);
     image_points_keyframes_.push_back(std::move(image_points_keyframe));
     cv::Mat gray_image;
-    cv::cvtColor(color_camera_ptr_->image(), gray_image, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(ObservedImage(), gray_image, cv::COLOR_BGR2GRAY);
     gray_images_keyframes_.push_back(std::move(gray_image));
   }
 

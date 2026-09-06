@@ -213,6 +213,9 @@ class TextureModality : public Modality {
   void set_descriptor_type(DescriptorType descriptor_type);
   void set_focused_image_size(int focused_image_size);
   void set_use_optical_flow_tracking(bool use_optical_flow_tracking);
+  void set_use_unfiltered_observations(bool enabled) {
+    use_unfiltered_observations_ = enabled;
+  }
   void set_use_geometry_guided_matching(bool use_geometry_guided_matching);
   void set_use_model_texture_sift(bool use_model_texture_sift);
   void set_use_model_texture_akaze(bool use_model_texture_akaze);
@@ -447,6 +450,7 @@ class TextureModality : public Modality {
   // Helper methods for CalculateCorrespondences
   void DetectAndComputeCorrKeypoints();
   void ComputeOpticalFlowCorrespondences();
+  const cv::Mat &ObservedImage() const;
   void ComputeGeometryGuidedCorrespondences();
   void ComputeModelTextureCorrespondences();
   void ComputeDiskModelTextureCorrespondences();
@@ -595,6 +599,7 @@ class TextureModality : public Modality {
   DescriptorType descriptor_type_ = DescriptorType::ORB;
   int focused_image_size_ = 200;
   bool use_optical_flow_tracking_ = false;
+  bool use_unfiltered_observations_ = false;
   bool use_geometry_guided_matching_ = false;
   bool use_model_texture_matching_ = false;
   bool use_model_texture_sift_ = false;
