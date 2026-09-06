@@ -111,6 +111,12 @@ class RBOTEvaluator {
 
   struct Result {
     int frame_index = 0;
+    // Final output before any benchmark ground-truth reset, not the next
+    // frame's initial state. Keep native world poses until serialization.
+    m3t::Transform3fA estimated_pose{m3t::Transform3fA::Identity()};
+    m3t::Transform3fA ground_truth_pose{m3t::Transform3fA::Identity()};
+    bool reset_primary_after_frame = false;
+    bool reset_secondary_after_frame = false;
     float translation_error = 0.0f;
     float rotation_error = 0.0f;
     float tracking_success = 0.0f;
@@ -193,7 +199,7 @@ class RBOTEvaluator {
 
  private:
   // Helper methods to run evaluation
-  void EvaluateRunConfiguration(
+  bool EvaluateRunConfiguration(
       const RunConfiguration &run_configuration,
       const std::shared_ptr<m3t::RendererGeometry> &renderer_geometry_ptr,
       Result *average_result) const;
@@ -229,6 +235,9 @@ class RBOTEvaluator {
   void SaveFinalResult(const Result &result, const std::string &title) const;
   void SaveDiagnostics(const std::vector<Result> &results,
                        const std::string &title) const;
+  bool SaveFramePoses(const std::vector<Result> &results,
+                      const RunConfiguration &configuration,
+                      const std::shared_ptr<m3t::Tracker> &tracker) const;
 
   // General helper methods
   bool LoadBodies();

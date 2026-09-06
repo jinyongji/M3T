@@ -16,4 +16,5 @@ doc/html
 !run_rbot_parallel.ps1
 !run_rbot_first4.ps1
 !run_rbot_final.ps1
+!analyze_rbot_poses.py
 !RBOT_RUN_GUIDE.md

@@ -8,6 +8,8 @@
 #include <cmath>
 #include <future>
 #include <limits>
+#include <locale>
+#include <stdexcept>
 
 RBOTEvaluator::RBOTEvaluator(const std::string &name,
                              const std::filesystem::path &dataset_directory,
@@ -186,8 +188,9 @@ bool RBOTEvaluator::Evaluate() {
     auto renderer_geometry_ptr{std::make_shared<m3t::RendererGeometry>("rg")};
     renderer_geometry_ptr->SetUp();
     for (size_t i = 0; i < int(run_configurations_.size()); ++i) {
-      EvaluateRunConfiguration(run_configurations_[i], renderer_geometry_ptr,
-                               &results_[i]);
+      if (!EvaluateRunConfiguration(run_configurations_[i], renderer_geometry_ptr,
+                                    &results_[i]))
+        return false;
 
       std::string title{run_configurations_[i].sequence_name + "_" +
                         (run_configurations_[i].occlusions ? "modeled_" : "") +
@@ -202,11 +205,15 @@ bool RBOTEvaluator::Evaluate() {
       renderer_geometry_ptr = std::make_shared<m3t::RendererGeometry>("rg");
       renderer_geometry_ptr->SetUp();
     }
+    // Do not use vector<bool>: separate configurations write separate ints.
+    std::vector<int> run_succeeded(run_configurations_.size(), 0);
 #pragma omp parallel for
     for (int i = 0; i < int(run_configurations_.size()); ++i) {
-      EvaluateRunConfiguration(run_configurations_[i],
-                               renderer_geometry_ptrs[omp_get_thread_num()],
-                               &results_[i]);
+      if (!EvaluateRunConfiguration(run_configurations_[i],
+                                    renderer_geometry_ptrs[omp_get_thread_num()],
+                                    &results_[i]))
+        continue;
+      run_succeeded[i] = 1;
 
       std::string title{run_configurations_[i].sequence_name + "_" +
                         (run_configurations_[i].occlusions ? "modeled_" : "") +
@@ -215,6 +222,8 @@ bool RBOTEvaluator::Evaluate() {
 #pragma omp critical
       VisualizeFinalResult(results_[i], title);
     }
+    for (int succeeded : run_succeeded)
+      if (!succeeded) return false;
   }
 
   // Calculate final results
@@ -232,7 +241,7 @@ float RBOTEvaluator::execution_time() const {
   return final_result_.execution_times.complete_cycle;
 }
 
-void RBOTEvaluator::EvaluateRunConfiguration(
+bool RBOTEvaluator::EvaluateRunConfiguration(
     const RunConfiguration &run_configuration,
     const std::shared_ptr<m3t::RendererGeometry> &renderer_geometry_ptr,
     Result *average_result) const {
@@ -661,6 +670,7 @@ void RBOTEvaluator::EvaluateRunConfiguration(
                                            run_configuration.body_name);
     if (use_dual_model_texture_hypothesis_) {
       const auto reset_disk_state = [&]() {
+        results[i].reset_primary_after_frame = true;
         ResetBody(tracker_ptr, i + 1);
         last_pose = body_ptr->body2world_pose();
         prediction_ready = false;
@@ -679,6 +689,7 @@ void RBOTEvaluator::EvaluateRunConfiguration(
           successful_pose_history.pop_front();
       };
       const auto reset_orb_state = [&]() {
+        results[i].reset_secondary_after_frame = true;
         ResetBody(orb_tracker_ptr, i + 1);
         orb_last_pose = orb_body_ptr->body2world_pose();
         orb_prediction_ready = false;
@@ -710,6 +721,7 @@ void RBOTEvaluator::EvaluateRunConfiguration(
         update_orb_state();
       }
     } else if (results[i].tracking_success == 0.0f) {
+      results[i].reset_primary_after_frame = true;
       ResetBody(tracker_ptr, i + 1);
       if (use_constant_velocity_prediction_ ||
           use_directional_temporal_prior_ || use_windowed_temporal_prior_ ||
@@ -754,6 +766,9 @@ void RBOTEvaluator::EvaluateRunConfiguration(
         run_configuration.body_name};
     SaveDiagnostics(results, title);
   }
+  // Serialization is outside the timed tracking cycle. A failed export must
+  // fail the run instead of presenting an incomplete pose file as success.
+  return !save_results_ || SaveFramePoses(results, run_configuration, tracker_ptr);
 }
 
 void RBOTEvaluator::SetUpTracker(
@@ -1151,6 +1166,8 @@ RBOTEvaluator::CalculateModalityDiagnostics(
 void RBOTEvaluator::CalculatePoseResults(
     const m3t::Transform3fA &body2world_pose,
     const m3t::Transform3fA &body2world_pose_gt, Result *result) const {
+  result->estimated_pose = body2world_pose;
+  result->ground_truth_pose = body2world_pose_gt;
   result->translation_error = (body2world_pose.translation().matrix() -
                                body2world_pose_gt.translation().matrix())
                                   .norm();
@@ -1249,6 +1266,114 @@ void RBOTEvaluator::SaveFinalResult(const Result &result,
       << result.execution_times.calculate_results << std::endl;
   ofs.flush();
   ofs.close();
+}
+
+bool RBOTEvaluator::SaveFramePoses(
+    const std::vector<Result> &results, const RunConfiguration &configuration,
+    const std::shared_ptr<m3t::Tracker> &tracker) const {
+  const auto directory{save_directory_ / "poses"};
+  const std::string title{configuration.sequence_name + "_" +
+                         (configuration.occlusions ? "modeled_" : "") +
+                         configuration.body_name};
+  try {
+    std::filesystem::create_directories(directory);
+    const auto &camera{tracker->camera_ptrs().at(0)};
+    const auto &world2camera{camera->world2camera_pose()};
+    const auto &body{tracker->optimizer_ptrs()[0]->root_link_ptr()->body_ptr()};
+    std::ofstream csv{directory / ("poses_" + title + ".csv")};
+    if (!csv) throw std::runtime_error("Cannot open pose CSV");
+    csv.imbue(std::locale::classic());
+    csv << std::setprecision(std::numeric_limits<float>::max_digits10);
+    csv << "frame,image_index,image_file,segment_id,estimate_source,pose_finite,"
+           "reset_primary_after_frame,reset_secondary_after_frame,"
+           "tracking_success,translation_error_m,rotation_error_rad,cycle_us";
+    for (const auto *prefix : {"est", "gt"}) {
+      for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 3; ++col)
+          csv << ',' << prefix << "_r" << row << col;
+      csv << ',' << prefix << "_tx_m," << prefix << "_ty_m," << prefix << "_tz_m";
+    }
+    csv << '\n';
+    int segment = 0;
+    for (const auto &result : results) {
+      const m3t::Transform3fA estimate{world2camera * result.estimated_pose};
+      const m3t::Transform3fA truth{world2camera * result.ground_truth_pose};
+      const int image_index = result.frame_index + 1;
+      const std::string index = std::to_string(image_index);
+      const std::string image_name = configuration.sequence_name +
+          std::string(std::max(0, 4 - int(index.size())), '0') + index + ".png";
+      const char *source = !use_dual_model_texture_hypothesis_ ? "single" :
+          (result.fusion_diagnostics.dual_hypothesis_selected_disk ? "disk" : "orb");
+      const bool finite = estimate.linear().allFinite() &&
+          estimate.translation().allFinite() && truth.linear().allFinite() &&
+          truth.translation().allFinite();
+      csv << result.frame_index << ',' << image_index << ',' << image_name << ','
+          << segment << ',' << source << ',' << int(finite) << ','
+          << int(result.reset_primary_after_frame) << ','
+          << int(result.reset_secondary_after_frame) << ','
+          << result.tracking_success << ',' << result.translation_error << ','
+          << result.rotation_error << ',' << result.execution_times.complete_cycle;
+      for (const auto *pose : {&estimate, &truth}) {
+        for (int row = 0; row < 3; ++row)
+          for (int col = 0; col < 3; ++col) csv << ',' << pose->matrix()(row, col);
+        for (int row = 0; row < 3; ++row) csv << ',' << pose->translation()(row);
+      }
+      csv << '\n';
+      // The failing frame belongs to the old segment. The following frame
+      // starts a new one. Independent dual resets are explicitly distinguished.
+      if (result.reset_primary_after_frame || result.reset_secondary_after_frame)
+        ++segment;
+    }
+    csv.close();
+    if (csv.fail()) throw std::runtime_error("Pose CSV write failed");
+
+    // Generate JSON in memory; ofstream(path) preserves Unicode output paths.
+    cv::FileStorage metadata{"", cv::FileStorage::WRITE |
+                                  cv::FileStorage::MEMORY | cv::FileStorage::FORMAT_JSON};
+    metadata << "schema_version" << 1 << "object" << configuration.body_name
+             << "sequence" << configuration.sequence_name
+             << "modeled_occlusion" << int(configuration.occlusions)
+             << "frame_count" << int(results.size())
+             << "first_image_index" << 1 << "last_image_index" << kNFrames_
+             << "pose_convention" << "p_camera = R * p_body + t"
+             << "rotation_layout" << "row_major_3x3"
+             << "translation_unit" << "m"
+             << "estimate_capture" << "final_selected_output_before_gt_reset"
+             << "reset_protocol" << (use_dual_hypothesis_independent_benchmark_reset_
+                 ? "rbot_independent_candidate_reset" : "rbot_selected_output_reset")
+             << "segment_definition" << "increment_next_frame_after_either_candidate_reset"
+             << "translation_threshold_m" << translation_error_threshold_
+             << "rotation_threshold_rad" << rotation_error_threshold_
+             << "dataset_directory" << dataset_directory_.generic_u8string()
+             << "ground_truth_file" << (dataset_directory_ / "poses_first.txt").generic_u8string()
+             << "model_file" << body->geometry_path().generic_u8string()
+             << "model_unit_in_meter" << body->geometry_unit_in_meter();
+    const auto &intrinsics{camera->intrinsics()};
+    metadata << "intrinsics" << "{" << "fx" << intrinsics.fu << "fy" << intrinsics.fv
+             << "cx" << intrinsics.ppu << "cy" << intrinsics.ppv
+             << "width" << intrinsics.width << "height" << intrinsics.height << "}";
+    const auto write_transform = [&](const char *key, const m3t::Transform3fA &pose) {
+      metadata << key << "[";
+      for (int row = 0; row < 4; ++row)
+        for (int col = 0; col < 4; ++col)
+          metadata << (row == 3 ? float(col == 3) : pose.matrix()(row, col));
+      metadata << "]";
+    };
+    write_transform("world_to_camera_row_major", world2camera);
+    write_transform("geometry_to_body_row_major", body->geometry2body_pose());
+    write_transform("initial_gt_pose_camera_row_major", world2camera * poses_gt_first_[0]);
+    metadata << "initial_image_index" << 0
+             << "initialization_note" << "image_0000_is_ground_truth_initialization_not_an_estimate";
+    std::ofstream json{directory / ("metadata_" + title + ".json")};
+    if (!json) throw std::runtime_error("Cannot open pose metadata");
+    json << metadata.releaseAndGetString();
+    json.close();
+    if (json.fail()) throw std::runtime_error("Pose metadata write failed");
+    return true;
+  } catch (const std::exception &error) {
+    std::cerr << "Pose export failed for " << title << ": " << error.what() << std::endl;
+    return false;
+  }
 }
 
 void RBOTEvaluator::SaveDiagnostics(const std::vector<Result> &results,

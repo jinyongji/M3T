@@ -118,6 +118,7 @@ $manifest = [ordered]@{
     GitCommit = $gitCommit; GitStatus = $gitStatus
     StartedAt = (Get-Date).ToString('o'); ExpectedConfigurations = @($selectedBodies).Count * @($selectedSequences).Count
     OMP_NUM_THREADS = 1; OPENCV_FOR_THREADS_NUM = 1
+    PoseSchemaVersion = 1; PoseDirectory = 'results/poses'
 }
 $manifestPath = Join-Path $resultRoot 'run_manifest.json'
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
@@ -150,13 +151,45 @@ try {
             $diagnosticPath = Join-Path $resultRoot "diagnostics\diagnostics_${seq}_${object}.csv"
             $frames = @(Import-Csv -LiteralPath $diagnosticPath)
             if ($frames.Count -ne 1000) { throw "Incomplete diagnostics: $diagnosticPath" }
+            $posePath = Join-Path $resultRoot "results\poses\poses_${seq}_${object}.csv"
+            $poseMetadataPath = Join-Path $resultRoot "results\poses\metadata_${seq}_${object}.json"
+            $poses = @(Import-Csv -LiteralPath $posePath)
+            $poseMetadata = Get-Content -LiteralPath $poseMetadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($poses.Count -ne 1000 -or $poseMetadata.frame_count -ne 1000 -or
+                $poseMetadata.schema_version -ne 1 -or $poseMetadata.object -ne $object -or
+                $poseMetadata.sequence -ne $seq -or $poseMetadata.translation_unit -ne 'm' -or
+                $poseMetadata.reset_protocol -ne 'rbot_selected_output_reset') {
+                throw "Incomplete or incompatible pose export: $posePath"
+            }
+            $poseFields = @(foreach ($prefix in @('est','gt')) {
+                foreach ($r in 0..2) { foreach ($c in 0..2) { "${prefix}_r${r}${c}" } }
+                foreach ($axis in @('x','y','z')) { "${prefix}_t${axis}_m" }
+            })
             $frameSuccess = 0
+            $poseSegment = 0
             for ($frameIndex = 0; $frameIndex -lt 1000; ++$frameIndex) {
                 if ([int]$frames[$frameIndex].frame -ne $frameIndex -or
                     $frames[$frameIndex].tracking_success -notin @('0','1')) {
                     throw "Invalid diagnostic frame: $diagnosticPath row $frameIndex"
                 }
                 $frameSuccess += [int]$frames[$frameIndex].tracking_success
+                $pose = $poses[$frameIndex]
+                $expectedImage = '{0}{1:D4}.png' -f $seq,($frameIndex + 1)
+                if ([int]$pose.frame -ne $frameIndex -or [int]$pose.image_index -ne ($frameIndex + 1) -or
+                    $pose.image_file -ne $expectedImage -or $pose.pose_finite -ne '1' -or
+                    $pose.estimate_source -ne 'single' -or [int]$pose.segment_id -ne $poseSegment -or
+                    $pose.tracking_success -ne $frames[$frameIndex].tracking_success -or
+                    $pose.reset_secondary_after_frame -ne '0' -or
+                    [int]$pose.reset_primary_after_frame -ne (1 - [int]$pose.tracking_success)) {
+                    throw "Pose frame/reset alignment failed: $posePath row $frameIndex"
+                }
+                foreach ($field in $poseFields) {
+                    $value = [double]::Parse($pose.$field,$culture)
+                    if ([double]::IsNaN($value) -or [double]::IsInfinity($value)) {
+                        throw "Non-finite pose: $posePath row $frameIndex field $field"
+                    }
+                }
+                $poseSegment += [int]$pose.reset_primary_after_frame
             }
             if ([Math]::Abs($success - $frameSuccess/1000.0) -gt 0.00001) {
                 throw "Summary/diagnostic success mismatch: $path"
