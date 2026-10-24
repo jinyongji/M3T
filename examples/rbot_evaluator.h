@@ -111,6 +111,12 @@ class RBOTEvaluator {
 
   struct Result {
     int frame_index = 0;
+    double benchmark_decode_us = 0.0;
+    double benchmark_preprocess_us = 0.0;
+    double benchmark_tracking_wall_us = 0.0;
+    double benchmark_metric_us = 0.0;
+    double benchmark_reset_us = 0.0;
+    double benchmark_frame_wall_us = 0.0;
     // Final output before any benchmark ground-truth reset, not the next
     // frame's initial state. Keep native world poses until serialization.
     m3t::Transform3fA estimated_pose{m3t::Transform3fA::Identity()};
@@ -129,6 +135,22 @@ class RBOTEvaluator {
   };
 
  public:
+  // One external RGB sequence uses the same tracker and temporal logic as
+  // RBOT. The industrial driver invokes it once per target configuration.
+  struct ExternalSequence {
+    std::filesystem::path image_directory;
+    std::filesystem::path model_file;
+    std::filesystem::path pose_file;
+    m3t::Intrinsics intrinsics{};
+    int image_count = 500;       // Includes the GT initialization image.
+    int pose_row_count = 500;    // Full input file, even for a short smoke run.
+    int first_image_index = 1;
+    int leading_zeros = 6;
+    std::string image_prefix;
+    float geometry_unit_in_meter = 1.0f;
+    float pose_translation_scale = 1.0f;
+  };
+  void set_external_sequence(const ExternalSequence &sequence);
   // Constructors and setup method
   RBOTEvaluator(const std::string &name,
                 const std::filesystem::path &dataset_directory,
@@ -203,7 +225,7 @@ class RBOTEvaluator {
       const RunConfiguration &run_configuration,
       const std::shared_ptr<m3t::RendererGeometry> &renderer_geometry_ptr,
       Result *average_result) const;
-  void SetUpTracker(
+  bool SetUpTracker(
       const RunConfiguration &run_configuration,
       const std::shared_ptr<m3t::RendererGeometry> &renderer_geometry_ptr,
       std::shared_ptr<m3t::Tracker> *tracker_ptr,
@@ -248,6 +270,7 @@ class RBOTEvaluator {
                            const std::filesystem::path &directory);
   static bool ReadPosesRBOTDataset(const std::filesystem::path &path,
                                    std::vector<m3t::Transform3fA> *poses);
+  bool ReadExternalPoses();
   static float ElapsedTime(
       const std::chrono::high_resolution_clock::time_point &begin_time);
 
@@ -266,6 +289,9 @@ class RBOTEvaluator {
   std::vector<std::string> body_names_;
   std::vector<std::string> sequence_names_;
   std::vector<bool> sequence_occlusions_;
+  bool external_sequence_enabled_ = false;
+  ExternalSequence external_sequence_;
+  int n_frames_ = kNFrames_;
 
   // Parameters for tracker configuration
   bool use_region_modality_;

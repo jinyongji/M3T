@@ -89,14 +89,36 @@ bool LoaderColorCamera::UpdateImage(bool synchronized) {
                              (image_name_pre_ + std::string(n_zeros, '0') +
                               std::to_string(load_index_) + image_name_post_ +
                               "." + load_image_type_)};
+  const auto decode_begin = std::chrono::steady_clock::now();
   image_ = cv::imread(path.string(), cv::IMREAD_UNCHANGED);
+  image_decode_time_us_ = std::chrono::duration<double, std::micro>(
+      std::chrono::steady_clock::now() - decode_begin).count();
   if (image_.empty()) {
     std::cerr << "Could not read image from " << path.string() << std::endl;
     return false;
   }
 
+  float conversion_time_us = 0.0f;
+  if (convert_16bit_to_8bit_) {
+    const auto begin = std::chrono::steady_clock::now();
+    if (image_.type() == CV_16UC3) {
+      image_.convertTo(image_, CV_8UC3, 1.0 / 257.0);
+    } else if (image_.type() != CV_8UC3) {
+      std::cerr << "Expected unsigned 8/16-bit three-channel color image: "
+                << path << std::endl;
+      return false;
+    }
+    if (image_.cols != intrinsics_.width || image_.rows != intrinsics_.height) {
+      std::cerr << "Image dimensions do not match camera calibration: " << path
+                << std::endl;
+      return false;
+    }
+    conversion_time_us = float(std::chrono::duration<double, std::micro>(
+        std::chrono::steady_clock::now() - begin).count());
+  }
   unfiltered_image_ = image_;
   FilterImageIfRequested();
+  preprocessing_time_us_ += conversion_time_us;
   load_index_++;
   SaveImageIfDesired();
   return true;

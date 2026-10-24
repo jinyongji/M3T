@@ -10,6 +10,7 @@
 #include <limits>
 #include <locale>
 #include <stdexcept>
+#include <sstream>
 
 RBOTEvaluator::RBOTEvaluator(const std::string &name,
                              const std::filesystem::path &dataset_directory,
@@ -24,8 +25,16 @@ RBOTEvaluator::RBOTEvaluator(const std::string &name,
       sequence_names_{sequence_names},
       sequence_occlusions_{sequence_occlusions} {}
 
+void RBOTEvaluator::set_external_sequence(const ExternalSequence &sequence) {
+  external_sequence_ = sequence;
+  external_sequence_enabled_ = true;
+  n_frames_ = sequence.image_count - 1;
+  set_up_ = false;
+}
+
 bool RBOTEvaluator::SetUp() {
   set_up_ = false;
+  if (sequence_names_.size() != sequence_occlusions_.size()) return false;
 
   // Create run configurations
   run_configurations_.clear();
@@ -36,17 +45,22 @@ bool RBOTEvaluator::SetUp() {
     }
   }
 
-  // Read poses
-  if (!ReadPosesRBOTDataset(dataset_directory_ / "poses_first.txt",
-                            &poses_gt_first_))
-    return false;
-  if (!ReadPosesRBOTDataset(dataset_directory_ / "poses_second.txt",
-                            &poses_gt_second_))
-    return false;
+  // External sequences have their own metre-valued per-object trajectory.
+  if (external_sequence_enabled_) {
+    if (body_names_.size() != 1 || sequence_names_.size() != 1 ||
+        sequence_occlusions_.size() != 1 || sequence_occlusions_[0] ||
+        n_frames_ < 1 || !ReadExternalPoses())
+      return false;
+  } else {
+    if (!ReadPosesRBOTDataset(dataset_directory_ / "poses_first.txt",
+                             &poses_gt_first_) ||
+        !ReadPosesRBOTDataset(dataset_directory_ / "poses_second.txt",
+                             &poses_gt_second_))
+      return false;
+  }
 
   // Load bodies and generate models
-  LoadBodies();
-  GenerateModels();
+  if (!LoadBodies() || !GenerateModels()) return false;
 
   set_up_ = true;
   return true;
@@ -246,7 +260,8 @@ bool RBOTEvaluator::EvaluateRunConfiguration(
     const std::shared_ptr<m3t::RendererGeometry> &renderer_geometry_ptr,
     Result *average_result) const {
   std::shared_ptr<m3t::Tracker> tracker_ptr;
-  SetUpTracker(run_configuration, renderer_geometry_ptr, &tracker_ptr);
+  if (!SetUpTracker(run_configuration, renderer_geometry_ptr, &tracker_ptr))
+    return false;
   const auto &body_ptr{tracker_ptr->optimizer_ptrs()[0]
                            ->root_link_ptr()
                            ->modality_ptrs()[0]
@@ -258,8 +273,8 @@ bool RBOTEvaluator::EvaluateRunConfiguration(
     orb_renderer_geometry_ptr =
         std::make_shared<m3t::RendererGeometry>("rg_orb_hypothesis");
     orb_renderer_geometry_ptr->SetUp();
-    SetUpTracker(run_configuration, orb_renderer_geometry_ptr,
-                 &orb_tracker_ptr, true);
+    if (!SetUpTracker(run_configuration, orb_renderer_geometry_ptr,
+                      &orb_tracker_ptr, true)) return false;
     orb_body_ptr = orb_tracker_ptr->optimizer_ptrs()[0]
                        ->root_link_ptr()
                        ->body_ptr();
@@ -267,6 +282,17 @@ bool RBOTEvaluator::EvaluateRunConfiguration(
   ResetBody(tracker_ptr, 0);
   if (orb_tracker_ptr) ResetBody(orb_tracker_ptr, 0);
   if (run_configuration.occlusions) ResetOcclusionBody(tracker_ptr, 0);
+  if (external_sequence_enabled_ && save_results_) {
+    const auto directory = save_directory_ / "overlays";
+    std::filesystem::create_directories(directory);
+    m3t::NormalColorViewer overlay{"initial_gt",
+        std::dynamic_pointer_cast<m3t::ColorCamera>(tracker_ptr->camera_ptrs()[0]),
+        renderer_geometry_ptr};
+    overlay.set_display_images(false);
+    overlay.StartSavingImages(directory);
+    if (!overlay.SetUp() || !overlay.UpdateViewer(external_sequence_.first_image_index))
+      return false;
+  }
 
   m3t::Transform3fA previous_previous_pose{body_ptr->body2world_pose()};
   m3t::Transform3fA previous_pose{body_ptr->body2world_pose()};
@@ -284,8 +310,9 @@ bool RBOTEvaluator::EvaluateRunConfiguration(
   bool orb_smoothed_prediction_ready{false};
 
   // Iterate over all frames
-  std::vector<Result> results(kNFrames_);
-  for (int i = 0; i < kNFrames_; ++i) {
+  std::vector<Result> results(n_frames_);
+  for (int i = 0; i < n_frames_; ++i) {
+    const auto benchmark_frame_begin = std::chrono::steady_clock::now();
     m3t::Transform3fA selected_pose_for_evaluation{
         body_ptr->body2world_pose()};
     m3t::Transform3fA predicted_pose_for_frame{m3t::Transform3fA::Identity()};
@@ -661,10 +688,13 @@ bool RBOTEvaluator::EvaluateRunConfiguration(
     }
 
     // Calculate results for main body
+    const auto benchmark_metric_begin = std::chrono::steady_clock::now();
     CalculatePoseResults(
         use_dual_model_texture_hypothesis_ ? selected_pose_for_evaluation
                                            : body_ptr->body2world_pose(),
         poses_gt_first_[i + 1], &results[i]);
+    results[i].benchmark_metric_us = std::chrono::duration<double, std::micro>(
+        std::chrono::steady_clock::now() - benchmark_metric_begin).count();
     if (visualize_all_results_)
       VisualizeFrameResult(results[i], run_configuration.sequence_name + ": " +
                                            run_configuration.body_name);
@@ -722,7 +752,10 @@ bool RBOTEvaluator::EvaluateRunConfiguration(
       }
     } else if (results[i].tracking_success == 0.0f) {
       results[i].reset_primary_after_frame = true;
+      const auto benchmark_reset_begin = std::chrono::steady_clock::now();
       ResetBody(tracker_ptr, i + 1);
+      results[i].benchmark_reset_us = std::chrono::duration<double, std::micro>(
+          std::chrono::steady_clock::now() - benchmark_reset_begin).count();
       if (use_constant_velocity_prediction_ ||
           use_directional_temporal_prior_ || use_windowed_temporal_prior_ ||
           use_phase_consistent_temporal_prior_ ||
@@ -757,6 +790,16 @@ bool RBOTEvaluator::EvaluateRunConfiguration(
       if (occlusion_result.tracking_success == 0.0f)
         ResetOcclusionBody(tracker_ptr, i + 1);
     }
+    results[i].benchmark_frame_wall_us = std::chrono::duration<double, std::micro>(
+        std::chrono::steady_clock::now() - benchmark_frame_begin).count();
+    results[i].benchmark_tracking_wall_us = std::max(0.0,
+        results[i].benchmark_frame_wall_us - results[i].benchmark_metric_us -
+        results[i].benchmark_reset_us);
+    const auto benchmark_camera = std::dynamic_pointer_cast<m3t::LoaderColorCamera>(tracker_ptr->camera_ptrs().at(0));
+    if (benchmark_camera) {
+      results[i].benchmark_decode_us = benchmark_camera->image_decode_time_us();
+      results[i].benchmark_preprocess_us = benchmark_camera->preprocessing_time_us();
+    }
   }
   CalculateAverageResult(results, average_result);
   if (collect_diagnostics_) {
@@ -771,7 +814,7 @@ bool RBOTEvaluator::EvaluateRunConfiguration(
   return !save_results_ || SaveFramePoses(results, run_configuration, tracker_ptr);
 }
 
-void RBOTEvaluator::SetUpTracker(
+bool RBOTEvaluator::SetUpTracker(
     const RunConfiguration &run_configuration,
     const std::shared_ptr<m3t::RendererGeometry> &renderer_geometry_ptr,
     std::shared_ptr<m3t::Tracker> *tracker_ptr,
@@ -781,11 +824,16 @@ void RBOTEvaluator::SetUpTracker(
 
   // Init camera
   auto camera_ptr{std::make_shared<m3t::LoaderColorCamera>(
-      "camera", dataset_directory_ / run_configuration.body_name / "frames",
-      kRBOTIntrinsics, run_configuration.sequence_name, 0, 4)};
+      "camera", external_sequence_enabled_ ? external_sequence_.image_directory
+          : dataset_directory_ / run_configuration.body_name / "frames",
+      external_sequence_enabled_ ? external_sequence_.intrinsics : kRBOTIntrinsics,
+      external_sequence_enabled_ ? external_sequence_.image_prefix : run_configuration.sequence_name,
+      external_sequence_enabled_ ? external_sequence_.first_image_index : 0,
+      external_sequence_enabled_ ? external_sequence_.leading_zeros : 4)};
+  camera_ptr->set_convert_16bit_to_8bit(external_sequence_enabled_);
   camera_ptr->set_use_noise_adaptive_filtering(use_noise_adaptive_filtering_);
   camera_ptr->set_use_gaussian_noise_filter(use_gaussian_noise_filter_);
-  camera_ptr->SetUp();
+  if (!camera_ptr->SetUp()) return false;
 
   // Init Viewer
   if (visualize_all_results_ && !force_orb_model_texture) {
@@ -799,8 +847,10 @@ void RBOTEvaluator::SetUpTracker(
   const std::string &body_name{run_configuration.body_name};
   auto body_ptr{std::make_shared<m3t::Body>(*body2body_ptr_map_.at(body_name))};
   renderer_geometry_ptr->AddBody(body_ptr);
-  auto occlusion_body_ptr{
-      std::make_shared<m3t::Body>(*body2body_ptr_map_.at(kOcclusionBodyName))};
+  std::shared_ptr<m3t::Body> occlusion_body_ptr;
+  if (!external_sequence_enabled_)
+    occlusion_body_ptr = std::make_shared<m3t::Body>(
+        *body2body_ptr_map_.at(kOcclusionBodyName));
   if (run_configuration.occlusions)
     renderer_geometry_ptr->AddBody(occlusion_body_ptr);
 
@@ -810,14 +860,14 @@ void RBOTEvaluator::SetUpTracker(
   silhouette_renderer_ptr->AddReferencedBody(body_ptr);
   if (run_configuration.occlusions)
     silhouette_renderer_ptr->AddReferencedBody(occlusion_body_ptr);
-  silhouette_renderer_ptr->SetUp();
+  if (!silhouette_renderer_ptr->SetUp()) return false;
 
   auto depth_renderer_ptr{std::make_shared<m3t::FocusedBasicDepthRenderer>(
       "depth_renderer", renderer_geometry_ptr, camera_ptr)};
   depth_renderer_ptr->AddReferencedBody(body_ptr);
-  depth_renderer_ptr->AddReferencedBody(occlusion_body_ptr);
+  if (occlusion_body_ptr) depth_renderer_ptr->AddReferencedBody(occlusion_body_ptr);
   depth_renderer_setter_(depth_renderer_ptr);
-  depth_renderer_ptr->SetUp();
+  if (!depth_renderer_ptr->SetUp()) return false;
 
   // Init link
   auto link_ptr{std::make_shared<m3t::Link>(body_name + "_link", body_ptr)};
@@ -836,7 +886,7 @@ void RBOTEvaluator::SetUpTracker(
     region_modality_ptr->set_n_unoccluded_iterations(0);
     if (run_configuration.occlusions)
       region_modality_ptr->ModelOcclusions(depth_renderer_ptr);
-    region_modality_ptr->SetUp();
+    if (!region_modality_ptr->SetUp()) return false;
     link_ptr->AddModality(region_modality_ptr);
   }
 
@@ -855,16 +905,16 @@ void RBOTEvaluator::SetUpTracker(
         use_selective_recovery_);
     if (run_configuration.occlusions)
       texture_modality_ptr->ModelOcclusions(depth_renderer_ptr);
-    texture_modality_ptr->SetUp();
+    if (!texture_modality_ptr->SetUp()) return false;
     link_ptr->AddModality(texture_modality_ptr);
   }
 
   // Init optimizer
-  link_ptr->SetUp();
+  if (!link_ptr->SetUp()) return false;
   auto optimizer_ptr{
       std::make_shared<m3t::Optimizer>(body_name + "_optimizer", link_ptr)};
   optimizer_setter_(optimizer_ptr);
-  optimizer_ptr->SetUp();
+  if (!optimizer_ptr->SetUp()) return false;
   (*tracker_ptr)->AddOptimizer(optimizer_ptr);
 
   if (run_configuration.occlusions) {
@@ -918,7 +968,7 @@ void RBOTEvaluator::SetUpTracker(
   }
 
   tracker_setter_(*tracker_ptr);
-  (*tracker_ptr)->SetUp(false);
+  return (*tracker_ptr)->SetUp(false);
 }
 
 void RBOTEvaluator::ResetBody(const std::shared_ptr<m3t::Tracker> &tracker_ptr,
@@ -947,7 +997,8 @@ void RBOTEvaluator::ExecuteMeasuredTrackingCycle(
   std::chrono::high_resolution_clock::time_point begin_time;
 
   // Update Cameras
-  tracker_ptr->UpdateCameras(iteration);
+  if (!tracker_ptr->UpdateCameras(iteration))
+    throw std::runtime_error("Camera update failed; refusing to evaluate a stale image");
 
   execution_times->calculate_correspondences = 0.0f;
   // Include image conditioning in the tracking budget, not hidden in I/O.
@@ -1168,16 +1219,26 @@ void RBOTEvaluator::CalculatePoseResults(
     const m3t::Transform3fA &body2world_pose_gt, Result *result) const {
   result->estimated_pose = body2world_pose;
   result->ground_truth_pose = body2world_pose_gt;
+  if (external_sequence_enabled_ &&
+      (!body2world_pose.matrix().allFinite() ||
+       !std::isfinite(body2world_pose.linear().determinant()) ||
+       body2world_pose.linear().determinant() <= 1.0e-8f)) {
+    result->translation_error = std::numeric_limits<float>::infinity();
+    result->rotation_error = std::numeric_limits<float>::infinity();
+    result->tracking_success = 0.0f;
+    return;
+  }
   result->translation_error = (body2world_pose.translation().matrix() -
                                body2world_pose_gt.translation().matrix())
                                   .norm();
-  result->rotation_error =
-      acos(((body2world_pose.rotation().matrix().transpose() *
-             body2world_pose_gt.rotation().matrix())
-                .trace() -
-            1.0f) /
-           2.0f);
-  if (result->translation_error > translation_error_threshold_ ||
+  const float rotation_cosine =
+      ((body2world_pose.rotation().matrix().transpose() *
+        body2world_pose_gt.rotation().matrix()).trace() - 1.0f) / 2.0f;
+  result->rotation_error = std::acos(external_sequence_enabled_
+      ? std::clamp(rotation_cosine, -1.0f, 1.0f) : rotation_cosine);
+  if ((external_sequence_enabled_ &&
+       (!std::isfinite(result->translation_error) || !std::isfinite(result->rotation_error))) ||
+      result->translation_error > translation_error_threshold_ ||
       result->rotation_error > rotation_error_threshold_)
     result->tracking_success = 0.0f;
   else
@@ -1293,15 +1354,18 @@ bool RBOTEvaluator::SaveFramePoses(
           csv << ',' << prefix << "_r" << row << col;
       csv << ',' << prefix << "_tx_m," << prefix << "_ty_m," << prefix << "_tz_m";
     }
-    csv << '\n';
+    csv << ",decode_us,preprocessing_us,tracking_wall_us,compute_wall_us,metric_us,reset_us,frame_wall_us,before_camera_us,correspondences_us,gradient_hessian_us,optimization_us,results_us\n";
     int segment = 0;
     for (const auto &result : results) {
       const m3t::Transform3fA estimate{world2camera * result.estimated_pose};
       const m3t::Transform3fA truth{world2camera * result.ground_truth_pose};
-      const int image_index = result.frame_index + 1;
+      const int image_index = result.frame_index + 1 +
+          (external_sequence_enabled_ ? external_sequence_.first_image_index : 0);
       const std::string index = std::to_string(image_index);
-      const std::string image_name = configuration.sequence_name +
-          std::string(std::max(0, 4 - int(index.size())), '0') + index + ".png";
+      const std::string image_name =
+          (external_sequence_enabled_ ? external_sequence_.image_prefix : configuration.sequence_name) +
+          std::string(std::max(0, (external_sequence_enabled_
+              ? external_sequence_.leading_zeros : 4) - int(index.size())), '0') + index + ".png";
       const char *source = !use_dual_model_texture_hypothesis_ ? "single" :
           (result.fusion_diagnostics.dual_hypothesis_selected_disk ? "disk" : "orb");
       const bool finite = estimate.linear().allFinite() &&
@@ -1318,7 +1382,11 @@ bool RBOTEvaluator::SaveFramePoses(
           for (int col = 0; col < 3; ++col) csv << ',' << pose->matrix()(row, col);
         for (int row = 0; row < 3; ++row) csv << ',' << pose->translation()(row);
       }
-      csv << '\n';
+      csv << ',' << result.benchmark_decode_us << ',' << result.benchmark_preprocess_us
+          << ',' << result.benchmark_tracking_wall_us << ',' << std::max(0.0, result.benchmark_tracking_wall_us-result.benchmark_decode_us)
+          << ',' << result.benchmark_metric_us << ',' << result.benchmark_reset_us << ',' << result.benchmark_frame_wall_us
+          << ",0," << result.execution_times.calculate_correspondences << ',' << result.execution_times.calculate_gradient_and_hessian
+          << ',' << result.execution_times.calculate_optimization << ',' << result.execution_times.calculate_results << '\n';
       // The failing frame belongs to the old segment. The following frame
       // starts a new one. Independent dual resets are explicitly distinguished.
       if (result.reset_primary_after_frame || result.reset_secondary_after_frame)
@@ -1334,18 +1402,21 @@ bool RBOTEvaluator::SaveFramePoses(
              << "sequence" << configuration.sequence_name
              << "modeled_occlusion" << int(configuration.occlusions)
              << "frame_count" << int(results.size())
-             << "first_image_index" << 1 << "last_image_index" << kNFrames_
+             << "first_image_index" << (external_sequence_enabled_ ? external_sequence_.first_image_index + 1 : 1)
+             << "last_image_index" << (external_sequence_enabled_ ? external_sequence_.first_image_index + n_frames_ : kNFrames_)
              << "pose_convention" << "p_camera = R * p_body + t"
              << "rotation_layout" << "row_major_3x3"
              << "translation_unit" << "m"
              << "estimate_capture" << "final_selected_output_before_gt_reset"
              << "reset_protocol" << (use_dual_hypothesis_independent_benchmark_reset_
-                 ? "rbot_independent_candidate_reset" : "rbot_selected_output_reset")
+                 ? "rbot_independent_candidate_reset" : (external_sequence_enabled_
+                     ? "industrial_selected_output_reset" : "rbot_selected_output_reset"))
              << "segment_definition" << "increment_next_frame_after_either_candidate_reset"
              << "translation_threshold_m" << translation_error_threshold_
              << "rotation_threshold_rad" << rotation_error_threshold_
              << "dataset_directory" << dataset_directory_.generic_u8string()
-             << "ground_truth_file" << (dataset_directory_ / "poses_first.txt").generic_u8string()
+             << "ground_truth_file" << (external_sequence_enabled_
+                 ? external_sequence_.pose_file : dataset_directory_ / "poses_first.txt").generic_u8string()
              << "model_file" << body->geometry_path().generic_u8string()
              << "model_unit_in_meter" << body->geometry_unit_in_meter();
     const auto &intrinsics{camera->intrinsics()};
@@ -1362,8 +1433,15 @@ bool RBOTEvaluator::SaveFramePoses(
     write_transform("world_to_camera_row_major", world2camera);
     write_transform("geometry_to_body_row_major", body->geometry2body_pose());
     write_transform("initial_gt_pose_camera_row_major", world2camera * poses_gt_first_[0]);
-    metadata << "initial_image_index" << 0
-             << "initialization_note" << "image_0000_is_ground_truth_initialization_not_an_estimate";
+    metadata << "initial_image_index" << (external_sequence_enabled_ ? external_sequence_.first_image_index : 0)
+             << "initialization_note" << "first_image_is_ground_truth_initialization_not_an_estimate";
+    if (external_sequence_enabled_)
+      metadata << "dataset_kind" << "industrial" << "image_prefix" << external_sequence_.image_prefix
+               << "image_leading_zeros" << external_sequence_.leading_zeros
+               << "image_directory" << external_sequence_.image_directory.generic_u8string()
+               << "ground_truth_translation_scale" << external_sequence_.pose_translation_scale
+               << "input_conversion" << "uint16_to_uint8_fixed_1_over_257"
+               << "invalid_estimate_policy" << "count_as_failure_and_gt_reset";
     std::ofstream json{directory / ("metadata_" + title + ".json")};
     if (!json) throw std::runtime_error("Cannot open pose metadata");
     json << metadata.releaseAndGetString();
@@ -1477,6 +1555,14 @@ void RBOTEvaluator::SaveDiagnostics(const std::vector<Result> &results,
 }
 
 bool RBOTEvaluator::LoadBodies() {
+  if (external_sequence_enabled_) {
+    auto body = std::make_shared<m3t::Body>(body_names_.at(0),
+        external_sequence_.model_file, external_sequence_.geometry_unit_in_meter,
+        true, false, m3t::Transform3fA::Identity());
+    if (!body->SetUp()) return false;
+    body2body_ptr_map_[body_names_.at(0)] = std::move(body);
+    return true;
+  }
   for (auto &body_name : body_names_) {
     if (!LoadSingleBody(body_name, dataset_directory_ / body_name))
       return false;
@@ -1500,7 +1586,38 @@ bool RBOTEvaluator::GenerateModels() {
   for (auto &body_name : body_names_) {
     if (!GenerateSingleModel(body_name, directory)) return false;
   }
-  return GenerateSingleModel(kOcclusionBodyName, directory);
+  return external_sequence_enabled_ || GenerateSingleModel(kOcclusionBodyName, directory);
+}
+
+bool RBOTEvaluator::ReadExternalPoses() {
+  std::ifstream stream{external_sequence_.pose_file};
+  stream.imbue(std::locale::classic());
+  if (!stream) return false;
+  poses_gt_first_.clear();
+  std::string line;
+  while (std::getline(stream, line)) {
+    const auto first = line.find_first_not_of(" \t\r");
+    if (first == std::string::npos || line[first] == '#') continue;
+    std::istringstream row{line};
+    row.imbue(std::locale::classic());
+    m3t::Transform3fA pose{m3t::Transform3fA::Identity()};
+    for (int r = 0; r < 3; ++r)
+      for (int c = 0; c < 3; ++c)
+        if (!(row >> pose.matrix()(r, c))) return false;
+    for (int r = 0; r < 3; ++r) {
+      if (!(row >> pose.matrix()(r, 3))) return false;
+      pose.matrix()(r, 3) *= external_sequence_.pose_translation_scale;
+    }
+    std::string extra;
+    if (row >> extra) return false;
+    if (!pose.matrix().allFinite() || pose.linear().determinant() < 0.999f ||
+        (pose.linear().transpose() * pose.linear() - Eigen::Matrix3f::Identity()).cwiseAbs().maxCoeff() > 1e-3f)
+      return false;
+    poses_gt_first_.push_back(pose);
+  }
+  if (stream.bad() || int(poses_gt_first_.size()) != external_sequence_.pose_row_count ||
+      n_frames_ + 1 > int(poses_gt_first_.size())) return false;
+  return true;
 }
 
 bool RBOTEvaluator::GenerateSingleModel(

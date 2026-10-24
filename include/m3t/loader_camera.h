@@ -46,6 +46,12 @@ class LoaderColorCamera : public ColorCamera {
   void set_n_leading_zeros(int n_leading_zeros);
   void set_image_name_post(const std::string &image_name_post);
   void set_load_image_type(const std::string &load_image_type);
+  // Explicit opt-in for rendered 16-bit RGB input. Preserve source files and
+  // use one fixed scale; never normalize each frame independently.
+  void set_convert_16bit_to_8bit(bool enabled) {
+    convert_16bit_to_8bit_ = enabled;
+  }
+  double image_decode_time_us() const { return image_decode_time_us_; }
 
   // Image-only noise estimation; independent of dataset names and poses.
   void set_use_noise_adaptive_filtering(bool enabled) {
@@ -80,6 +86,8 @@ class LoaderColorCamera : public ColorCamera {
   std::string image_name_post_ = "";
   std::string load_image_type_ = "png";
   bool use_noise_adaptive_filtering_ = false;
+  bool convert_16bit_to_8bit_ = false;
+  double image_decode_time_us_ = 0.0;
   bool use_gaussian_noise_filter_ = false;
   float noise_standard_deviation_ = 0.0f;
   float preprocessing_time_us_ = 0.0f;
