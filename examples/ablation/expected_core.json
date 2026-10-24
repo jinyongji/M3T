@@ -1,0 +1,10 @@
+{
+  "src/link.cpp": "1aa8eee718d757df2f986b15000fd607737e81c1739a10d926184ab01eebd43d",
+  "src/texture_modality.cpp": "151a509fa3f3f5add6e2b286d7b8e3157ba52b35e7ca6f4e33e9e0b8323a74bf",
+  "src/loader_camera.cpp": "b1c98ab648d32460242a7d36a26bb1ba1034fe53f88f0fd00f685983835894f7",
+  "src/body.cpp": "ff29c9a975933f45fc1b177ba332e99065479382b7c8cc645f0cc72131106101",
+  "src/renderer_geometry.cpp": "492fdf2d9fd9576bfc910685f008cb8b2e46ee3592a8641dda899a7cfd484217",
+  "src/textured_renderer.cpp": "7febf5d9b40772183ac5bce1ddb5a0c74799532b212e4dae645d5dba2ba3b837",
+  "examples/rbot_evaluator.cpp": "0749c8b83660871a3ad23bbb71fdece91bc60eda3eb351e4bc218cb7c7e5fc51",
+  "examples/evaluate_industrial_dataset.cpp": "576813042602bb820638f569c5ccdd3da876ed20903e23e2c4d3f2ba96d6de94"
+}

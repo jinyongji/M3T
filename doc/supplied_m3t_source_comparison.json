@@ -1,0 +1,170 @@
+{
+  "original": "F:\\projects\\3DObjectTracking-master\\M3T",
+  "current": "F:\\projects\\M3T",
+  "scope": "include/src/examples C++ headers/sources and CMakeLists; comparison adapter directory excluded; CRLF normalized to LF",
+  "unchanged_files": 78,
+  "changed_or_new_files": 23,
+  "changes": [
+    {
+      "file": "examples/CMakeLists.txt",
+      "added": 16,
+      "removed": 0,
+      "original_sha256_lf": "3b0a6afc36123816af22b47c9030483361f6d47a958d1529d9bf14e8eafb6d50",
+      "current_sha256_lf": "0b1735f4e61a31e001f76091b585d9f988ae2e82b7b41163bdff06a0b9dd182b"
+    },
+    {
+      "file": "examples/evaluate_industrial_dataset.cpp",
+      "added": 179,
+      "removed": 0,
+      "original_sha256_lf": null,
+      "current_sha256_lf": "576813042602bb820638f569c5ccdd3da876ed20903e23e2c4d3f2ba96d6de94"
+    },
+    {
+      "file": "examples/evaluate_rbot_dataset.cpp",
+      "added": 363,
+      "removed": 12,
+      "original_sha256_lf": "36a9123adf43899e6a04c9297d0093974a4bb675f50c71785b518e6ae26d2487",
+      "current_sha256_lf": "29b47270302bd853dee04bfeca16134163d42540e02120c97064f09b5a37277d"
+    },
+    {
+      "file": "examples/parameter_study_rbot_dataset.cpp",
+      "added": 3,
+      "removed": 2,
+      "original_sha256_lf": "43fa086bbf2387a0ae75af987347825a1fd38c6373094e76d485d5b3b5a78942",
+      "current_sha256_lf": "005e12d5ff9490b59b65938222f76e65d8d5e5db5bc55790236cc64dd1685a40"
+    },
+    {
+      "file": "examples/rbot_evaluator.cpp",
+      "added": 1135,
+      "removed": 58,
+      "original_sha256_lf": "b4b51783bdf92851d8f4c47fc9969c87dff2963653f62aa46ff2d229bdddcd02",
+      "current_sha256_lf": "dbca06cf7c1f7915c370903c6a873b7129862ed1bf5580f84d26151f9d55d3ca"
+    },
+    {
+      "file": "examples/rbot_evaluator.h",
+      "added": 141,
+      "removed": 4,
+      "original_sha256_lf": "f97941a6f96586adff5c647e69d88aff89650de5db31a047440c9410ee78201c",
+      "current_sha256_lf": "b1f4061fa8e4d9ed43cfcaf74e27da28c5617c5e2eac5ec9a937198a320b9a40"
+    },
+    {
+      "file": "include/m3t/body.h",
+      "added": 6,
+      "removed": 0,
+      "original_sha256_lf": "bae85def4e7b4a4715f1dced607b175e98a8fb705a391a886dd89e420e1b69e5",
+      "current_sha256_lf": "747412d0c39b0c865c774eac29619922bf00d9eda45af06c286dd3c325d3bd7e"
+    },
+    {
+      "file": "include/m3t/disk_feature_extractor.h",
+      "added": 47,
+      "removed": 0,
+      "original_sha256_lf": null,
+      "current_sha256_lf": "3421725645a9e18400daaf8f81a470884ad08c818f9977f276317c29015f51ca"
+    },
+    {
+      "file": "include/m3t/link.h",
+      "added": 23,
+      "removed": 0,
+      "original_sha256_lf": "f16eefe32d76f1ab13684dc072e2f11591c3cf2a8d56dd9508195bfa57fe6219",
+      "current_sha256_lf": "f4c641f7dc088efcb2fd991f5aa36fb81b415d84b9bbacd167b7f501be59f17b"
+    },
+    {
+      "file": "include/m3t/loader_camera.h",
+      "added": 23,
+      "removed": 0,
+      "original_sha256_lf": "080b7a76202d719b290e1b0b53a50f6f42a3fc1460d22dfa60731ab9aa5e8a9a",
+      "current_sha256_lf": "8b6e3a1d2ab843dd405315a1077014c79b077caf6a751f98ce8bc109519281cd"
+    },
+    {
+      "file": "include/m3t/region_modality.h",
+      "added": 36,
+      "removed": 0,
+      "original_sha256_lf": "67cd390b392eb3b76c109d24163c72862521fa3e3326afc70f54a26f9cb729ce",
+      "current_sha256_lf": "5b01ddd25ff4cf8f1b5baa471a30b2748430b1ddd173e8eae3e589faa8b6687f"
+    },
+    {
+      "file": "include/m3t/renderer_geometry.h",
+      "added": 2,
+      "removed": 0,
+      "original_sha256_lf": "35547a8130bd36953764fe814c68db6f3339b88775ec894b9086efc10667c4ee",
+      "current_sha256_lf": "6a4d10d7452ec44b5110c05cb5c3cce2a6008e287ededc0beb004b892fc83a8a"
+    },
+    {
+      "file": "include/m3t/texture_modality.h",
+      "added": 241,
+      "removed": 0,
+      "original_sha256_lf": "9c3bae91067ae4582801d5230584c4bebf9a416d4b7b663537bc82bb929e9009",
+      "current_sha256_lf": "1cb0f3c1191fcc760ccefe24506c1c60ccdb8d410526d95bc8cefbc2e8864e79"
+    },
+    {
+      "file": "include/m3t/textured_renderer.h",
+      "added": 76,
+      "removed": 0,
+      "original_sha256_lf": null,
+      "current_sha256_lf": "189df559b7f47cccf803620bf0f444b9854537747052a6f6046dd7f5c5dcf81f"
+    },
+    {
+      "file": "src/CMakeLists.txt",
+      "added": 14,
+      "removed": 0,
+      "original_sha256_lf": "859984405939a780c74790401552e4ca6dc161b26da550268684414b6ea9b313",
+      "current_sha256_lf": "a2339066e62f5d2e114d2b5b914c74cb744612ec79c6f780280b48434e9d220a"
+    },
+    {
+      "file": "src/body.cpp",
+      "added": 50,
+      "removed": 11,
+      "original_sha256_lf": "5a322cf4634a95f08deb982d12ba2a2fa432b87ac61740d772e2b69e9c386fbf",
+      "current_sha256_lf": "2e3ceeaa8332ba42e35787cb507425b2b868f83f2cb6c51b42f2d5a35fbb3bc3"
+    },
+    {
+      "file": "src/disk_feature_extractor.cpp",
+      "added": 228,
+      "removed": 0,
+      "original_sha256_lf": null,
+      "current_sha256_lf": "5818f906ea86ac7e51b0c51262490d90be2f86211086162e42170eadf92dea8f"
+    },
+    {
+      "file": "src/link.cpp",
+      "added": 441,
+      "removed": 2,
+      "original_sha256_lf": "fce20dfb2f338933e3622cbe499aa238125f617f6326dd139bffba2b9592c65e",
+      "current_sha256_lf": "78b94cf9372c5a3a9a305df5fdfa1a9609415f742144020c8d246a5777c759a1"
+    },
+    {
+      "file": "src/loader_camera.cpp",
+      "added": 86,
+      "removed": 0,
+      "original_sha256_lf": "08d19f9f2a0a24ade9caf3079af7e37b8d977985610438ad61cece16cfd7f4b5",
+      "current_sha256_lf": "5f49b2c28617db828798679e29efb5595a4aa84f7c936ebadd0092ee5d80711a"
+    },
+    {
+      "file": "src/region_modality.cpp",
+      "added": 184,
+      "removed": 1,
+      "original_sha256_lf": "58b37f47d7937f9a9a687fb7dd608049d83addd16a1b03cd7b00bd2e79a41c97",
+      "current_sha256_lf": "58beb9ab201cbcd7fd176a77fb63b13fe98ae5cb50d72738b690da218d50d4fe"
+    },
+    {
+      "file": "src/renderer_geometry.cpp",
+      "added": 44,
+      "removed": 8,
+      "original_sha256_lf": "753b38f9b89516da1533ff61ce6080e95599c881f02028fac1ca7508db7112ed",
+      "current_sha256_lf": "cd6649605d2650eb3181ba6273318bb3f308ff1e0e253bff1cc8a7fef8ce187b"
+    },
+    {
+      "file": "src/texture_modality.cpp",
+      "added": 1990,
+      "removed": 43,
+      "original_sha256_lf": "9f3d22e9fb3d55c0d65b7ab87d1c542375fbc50b6d4d49a6af51843948b0bb52",
+      "current_sha256_lf": "6522018d674313cfb659e3f472d838e9d6d9ed892e08e75ae8a100e83c406713"
+    },
+    {
+      "file": "src/textured_renderer.cpp",
+      "added": 224,
+      "removed": 0,
+      "original_sha256_lf": null,
+      "current_sha256_lf": "7febf5d9b40772183ac5bce1ddb5a0c74799532b212e4dae645d5dba2ba3b837"
+    }
+  ]
+}

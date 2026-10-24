@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-23",
+  "status": "design_reviewable_implementation_pending",
+  "runner_ready": false,
+  "no_server_jobs_launched": true,
+  "purpose": "Controlled component attribution, not five-method reruns or new accuracy claims",
+  "source": {
+    "current": "F:\\projects\\M3T",
+    "original": "F:\\projects\\3DObjectTracking-master\\M3T",
+    "rbot_ours_binary_sha256": "8719d5fc8f5b4a81dc6713f81c5a7945951450dd8e3fa8b6d43cbf23bc48d2c1",
+    "rbot_icg_plus_binary_sha256": "88e0397c1c8d1bc0815c262ec4934c57adfb40492009cdeca7097a92ee572244",
+    "files": [
+      {
+        "file": "src/link.cpp",
+        "local_sha256": "1aa8eee718d757df2f986b15000fd607737e81c1739a10d926184ab01eebd43d",
+        "local_sha256_lf": "78b94cf9372c5a3a9a305df5fdfa1a9609415f742144020c8d246a5777c759a1",
+        "original_sha256_lf": "fce20dfb2f338933e3622cbe499aa238125f617f6326dd139bffba2b9592c65e",
+        "rbot_frozen_sha256": "1aa8eee718d757df2f986b15000fd607737e81c1739a10d926184ab01eebd43d",
+        "matches_rbot_frozen": true
+      },
+      {
+        "file": "src/texture_modality.cpp",
+        "local_sha256": "151a509fa3f3f5add6e2b286d7b8e3157ba52b35e7ca6f4e33e9e0b8323a74bf",
+        "local_sha256_lf": "6522018d674313cfb659e3f472d838e9d6d9ed892e08e75ae8a100e83c406713",
+        "original_sha256_lf": "9f3d22e9fb3d55c0d65b7ab87d1c542375fbc50b6d4d49a6af51843948b0bb52",
+        "rbot_frozen_sha256": "151a509fa3f3f5add6e2b286d7b8e3157ba52b35e7ca6f4e33e9e0b8323a74bf",
+        "matches_rbot_frozen": true
+      },
+      {
+        "file": "src/loader_camera.cpp",
+        "local_sha256": "b1c98ab648d32460242a7d36a26bb1ba1034fe53f88f0fd00f685983835894f7",
+        "local_sha256_lf": "5f49b2c28617db828798679e29efb5595a4aa84f7c936ebadd0092ee5d80711a",
+        "original_sha256_lf": "08d19f9f2a0a24ade9caf3079af7e37b8d977985610438ad61cece16cfd7f4b5",
+        "rbot_frozen_sha256": "b1c98ab648d32460242a7d36a26bb1ba1034fe53f88f0fd00f685983835894f7",
+        "matches_rbot_frozen": true
+      },
+      {
+        "file": "src/body.cpp",
+        "local_sha256": "ff29c9a975933f45fc1b177ba332e99065479382b7c8cc645f0cc72131106101",
+        "local_sha256_lf": "2e3ceeaa8332ba42e35787cb507425b2b868f83f2cb6c51b42f2d5a35fbb3bc3",
+        "original_sha256_lf": "5a322cf4634a95f08deb982d12ba2a2fa432b87ac61740d772e2b69e9c386fbf",
+        "rbot_frozen_sha256": "ff29c9a975933f45fc1b177ba332e99065479382b7c8cc645f0cc72131106101",
+        "matches_rbot_frozen": true
+      },
+      {
+        "file": "src/renderer_geometry.cpp",
+        "local_sha256": "492fdf2d9fd9576bfc910685f008cb8b2e46ee3592a8641dda899a7cfd484217",
+        "local_sha256_lf": "cd6649605d2650eb3181ba6273318bb3f308ff1e0e253bff1cc8a7fef8ce187b",
+        "original_sha256_lf": "753b38f9b89516da1533ff61ce6080e95599c881f02028fac1ca7508db7112ed",
+        "rbot_frozen_sha256": "492fdf2d9fd9576bfc910685f008cb8b2e46ee3592a8641dda899a7cfd484217",
+        "matches_rbot_frozen": true
+      },
+      {
+        "file": "src/textured_renderer.cpp",
+        "local_sha256": "7febf5d9b40772183ac5bce1ddb5a0c74799532b212e4dae645d5dba2ba3b837",
+        "local_sha256_lf": "7febf5d9b40772183ac5bce1ddb5a0c74799532b212e4dae645d5dba2ba3b837",
+        "original_sha256_lf": null,
+        "rbot_frozen_sha256": "7febf5d9b40772183ac5bce1ddb5a0c74799532b212e4dae645d5dba2ba3b837",
+        "matches_rbot_frozen": true
+      },
+      {
+        "file": "src/disk_feature_extractor.cpp",
+        "local_sha256": "5818f906ea86ac7e51b0c51262490d90be2f86211086162e42170eadf92dea8f",
+        "local_sha256_lf": "5818f906ea86ac7e51b0c51262490d90be2f86211086162e42170eadf92dea8f",
+        "original_sha256_lf": null,
+        "rbot_frozen_sha256": "1648d4c4cdc73264daccdb605d187cf84b2dacb58f57ff7baf6832abe0561e9d",
+        "matches_rbot_frozen": false
+      },
+      {
+        "file": "examples/rbot_evaluator.cpp",
+        "local_sha256": "0749c8b83660871a3ad23bbb71fdece91bc60eda3eb351e4bc218cb7c7e5fc51",
+        "local_sha256_lf": "dbca06cf7c1f7915c370903c6a873b7129862ed1bf5580f84d26151f9d55d3ca",
+        "original_sha256_lf": "b4b51783bdf92851d8f4c47fc9969c87dff2963653f62aa46ff2d229bdddcd02",
+        "rbot_frozen_sha256": "0749c8b83660871a3ad23bbb71fdece91bc60eda3eb351e4bc218cb7c7e5fc51",
+        "matches_rbot_frozen": true
+      },
+      {
+        "file": "examples/evaluate_industrial_dataset.cpp",
+        "local_sha256": "576813042602bb820638f569c5ccdd3da876ed20903e23e2c4d3f2ba96d6de94",
+        "local_sha256_lf": "576813042602bb820638f569c5ccdd3da876ed20903e23e2c4d3f2ba96d6de94",
+        "original_sha256_lf": null,
+        "rbot_frozen_sha256": "576813042602bb820638f569c5ccdd3da876ed20903e23e2c4d3f2ba96d6de94",
+        "matches_rbot_frozen": true
+      }
+    ],
+    "rbot_summary_sha256": "768d63713388795c03ade07c98a522576a3d2d1652db203f041d4422e03da891"
+  },
+  "common": {
+    "input": "RGB only",
+    "region_modality": true,
+    "video_orb": true,
+    "sensor_depth": false,
+    "corr_iterations": 7,
+    "update_iterations": 2,
+    "rotation_regularization": 1000,
+    "translation_regularization": 30000,
+    "disk_input_size": 128,
+    "disk_ransac_threshold_px": 3,
+    "threshold_translation_m": 0.05,
+    "threshold_rotation_deg": 5,
+    "initialization": "first image GT; exclude initialization image from accuracy",
+    "reset": "count failure and save estimated pose before resetting to that frame GT",
+    "warmup_timing_frames": 10,
+    "primary_timing": "compute_wall_us",
+    "no_known_occluder_ground_truth": true,
+    "diagnostics": "separate explanatory runs; exclude verbose diagnostics from formal timing"
+  },
+  "core_variants": [
+    {
+      "id": "A0",
+      "name": "compatibility_all_off",
+      "modules": {
+        "cad_disk": false,
+        "reliability_complement_fusion": false,
+        "prediction_initialization": false,
+        "directional_prior": false,
+        "region_noise_filter": false
+      }
+    },
+    {
+      "id": "A1",
+      "name": "full",
+      "modules": {
+        "cad_disk": true,
+        "reliability_complement_fusion": true,
+        "prediction_initialization": true,
+        "directional_prior": true,
+        "region_noise_filter": true
+      }
+    },
+    {
+      "id": "A2",
+      "name": "without_cad_constraint",
+      "modules": {
+        "cad_disk": false,
+        "reliability_complement_fusion": true,
+        "prediction_initialization": true,
+        "directional_prior": true,
+        "region_noise_filter": true
+      }
+    },
+    {
+      "id": "A3",
+      "name": "without_fusion_module",
+      "modules": {
+        "cad_disk": true,
+        "reliability_complement_fusion": false,
+        "prediction_initialization": true,
+        "directional_prior": true,
+        "region_noise_filter": true
+      }
+    },
+    {
+      "id": "A4",
+      "name": "without_prediction_initialization",
+      "modules": {
+        "cad_disk": true,
+        "reliability_complement_fusion": true,
+        "prediction_initialization": false,
+        "directional_prior": true,
+        "region_noise_filter": true
+      }
+    },
+    {
+      "id": "A5",
+      "name": "without_directional_prior",
+      "modules": {
+        "cad_disk": true,
+        "reliability_complement_fusion": true,
+        "prediction_initialization": true,
+        "directional_prior": false,
+        "region_noise_filter": true
+      }
+    },
+    {
+      "id": "A6",
+      "name": "without_region_noise_filter",
+      "modules": {
+        "cad_disk": true,
+        "reliability_complement_fusion": true,
+        "prediction_initialization": true,
+        "directional_prior": true,
+        "region_noise_filter": false
+      }
+    },
+    {
+      "id": "A7",
+      "name": "without_all_motion_modules",
+      "modules": {
+        "cad_disk": true,
+        "reliability_complement_fusion": true,
+        "prediction_initialization": false,
+        "directional_prior": false,
+        "region_noise_filter": true
+      }
+    }
+  ],
+  "additional_priority_control": {
+    "id": "A8",
+    "name": "compatibility_plus_region_noise_filter",
+    "modules": {
+      "cad_disk": false,
+      "reliability_complement_fusion": false,
+      "prediction_initialization": false,
+      "directional_prior": false,
+      "region_noise_filter": true
+    }
+  },
+  "switch_requirements": {
+    "cad_disabled": [
+      "set_use_model_texture_disk(false)",
+      "DoNotUseModelTextureMatching()",
+      "do not create CAD textured renderer or DISK session; preserve video ORB"
+    ],
+    "fusion_disabled": [
+      "use existing false branch; removes both reliability and information complement projection",
+      "directional prior must still follow its independent switch"
+    ],
+    "prediction_initialization_disabled": [
+      "continue computing the prior target if T is enabled",
+      "do not write predicted pose as optimization initialization"
+    ],
+    "directional_prior_disabled": [
+      "preserve Full two-velocity prediction smoothing",
+      "disable only application of directional prior"
+    ],
+    "noise_disabled": [
+      "disable adaptive filtering; keep the same image conversion and raw ORB inputs"
+    ],
+    "compatibility": [
+      "all new active modules off, same Region + video ORB and optimization parameters",
+      "compare with external original ICG+ before attributing gains"
+    ]
+  },
+  "implementation_needed": [
+    "configurable independent driver; existing final wrappers hard-code all modules enabled",
+    "separate prediction smoothing from directional-prior flag without changing Full behavior",
+    "new provenance, binary/config hashing, per-frame pose/timing/reset audit and resume",
+    "separate cache roots; existing RBOT coordinator holds a global industrial cache lock",
+    "optional independent scalar-reliability and directional-complement switches for mechanism study"
+  ],
+  "gpu_execution": {
+    "lanes": "one complete dataset per GPU; variants sequential within each lane",
+    "selection": "inspect current load, then bind an actual UUID",
+    "accuracy_parallel": true,
+    "formal_timing_parallel": false,
+    "formal_timing_repeats_minimum": 3,
+    "note": "CPU/llvmpipe, memory and disk remain shared across GPUs"
+  },
+  "datasets": [
+    {
+      "id": "rbot",
+      "gpu_lane": "A",
+      "configurations": 72,
+      "evaluated_frames_per_configuration": 1000,
+      "input": "/home/jyj/autodl-tmp/RBOT-dataset",
+      "gpu_uuid": null,
+      "evaluated_frames_per_variant": 72000,
+      "jobs": 576,
+      "accuracy_repeats": 1,
+      "output_root": "/home/jyj/autodl-tmp/M3T-ablation-runs/rbot",
+      "cache_root": "/home/jyj/autodl-tmp/M3T-ablation-cache/rbot"
+    },
+    {
+      "id": "industrial_base",
+      "gpu_lane": "B",
+      "configurations": 150,
+      "evaluated_frames_per_configuration": 499,
+      "input": "/home/jyj/autodl-tmp/industrial-render-900x600/dataset/交付物/工业物体跟踪数据集-v0.8-900x600-20261016",
+      "gpu_uuid": null,
+      "evaluated_frames_per_variant": 74850,
+      "jobs": 1200,
+      "accuracy_repeats": 1,
+      "output_root": "/home/jyj/autodl-tmp/M3T-ablation-runs/industrial_base",
+      "cache_root": "/home/jyj/autodl-tmp/M3T-ablation-cache/industrial_base"
+    },
+    {
+      "id": "industrial_advanced",
+      "gpu_lane": "C",
+      "configurations": 324,
+      "evaluated_frames_per_configuration": 499,
+      "input": "/home/jyj/autodl-tmp/industrial-render-advanced-v1/dataset/交付物/工业跟踪进阶数据集-v1.0-20261018",
+      "gpu_uuid": null,
+      "evaluated_frames_per_variant": 161676,
+      "jobs": 2592,
+      "accuracy_repeats": 1,
+      "output_root": "/home/jyj/autodl-tmp/M3T-ablation-runs/industrial_advanced",
+      "cache_root": "/home/jyj/autodl-tmp/M3T-ablation-cache/industrial_advanced"
+    }
+  ],
+  "total_core_jobs": 4368,
+  "total_core_evaluated_frames": 2468208,
+  "with_additional_noise_control": {
+    "jobs": 4914,
+    "evaluated_frames": 2776734
+  },
+  "continuous_tracking_requirements": [
+    "separate protocol from the GT-reset benchmark",
+    "no GT-based reset, prediction-history update/gating, recovery trigger or online confidence",
+    "GT may be used for common initialization and offline evaluation only"
+  ],
+  "no_ablation_results_available": true
+}

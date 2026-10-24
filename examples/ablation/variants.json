@@ -1,0 +1,110 @@
+[
+  {
+    "id": "A0",
+    "name": "compatibility_all_off",
+    "modules": {
+      "cad_disk": false,
+      "reliability_complement_fusion": false,
+      "prediction_initialization": false,
+      "directional_prior": false,
+      "region_noise_filter": false
+    },
+    "flags": "00000"
+  },
+  {
+    "id": "A1",
+    "name": "full",
+    "modules": {
+      "cad_disk": true,
+      "reliability_complement_fusion": true,
+      "prediction_initialization": true,
+      "directional_prior": true,
+      "region_noise_filter": true
+    },
+    "flags": "11111"
+  },
+  {
+    "id": "A2",
+    "name": "without_cad_constraint",
+    "modules": {
+      "cad_disk": false,
+      "reliability_complement_fusion": true,
+      "prediction_initialization": true,
+      "directional_prior": true,
+      "region_noise_filter": true
+    },
+    "flags": "01111"
+  },
+  {
+    "id": "A3",
+    "name": "without_fusion_module",
+    "modules": {
+      "cad_disk": true,
+      "reliability_complement_fusion": false,
+      "prediction_initialization": true,
+      "directional_prior": true,
+      "region_noise_filter": true
+    },
+    "flags": "10111"
+  },
+  {
+    "id": "A4",
+    "name": "without_prediction_initialization",
+    "modules": {
+      "cad_disk": true,
+      "reliability_complement_fusion": true,
+      "prediction_initialization": false,
+      "directional_prior": true,
+      "region_noise_filter": true
+    },
+    "flags": "11011"
+  },
+  {
+    "id": "A5",
+    "name": "without_directional_prior",
+    "modules": {
+      "cad_disk": true,
+      "reliability_complement_fusion": true,
+      "prediction_initialization": true,
+      "directional_prior": false,
+      "region_noise_filter": true
+    },
+    "flags": "11101"
+  },
+  {
+    "id": "A6",
+    "name": "without_region_noise_filter",
+    "modules": {
+      "cad_disk": true,
+      "reliability_complement_fusion": true,
+      "prediction_initialization": true,
+      "directional_prior": true,
+      "region_noise_filter": false
+    },
+    "flags": "11110"
+  },
+  {
+    "id": "A7",
+    "name": "without_all_motion_modules",
+    "modules": {
+      "cad_disk": true,
+      "reliability_complement_fusion": true,
+      "prediction_initialization": false,
+      "directional_prior": false,
+      "region_noise_filter": true
+    },
+    "flags": "11001"
+  },
+  {
+    "id": "A8",
+    "name": "compatibility_plus_region_noise_filter",
+    "modules": {
+      "cad_disk": false,
+      "reliability_complement_fusion": false,
+      "prediction_initialization": false,
+      "directional_prior": false,
+      "region_noise_filter": true
+    },
+    "flags": "00001"
+  }
+]

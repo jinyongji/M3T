@@ -1,6 +1,8 @@
 /*
 /*/
 *.asv
+__pycache__/
+*.py[cod]
 doc/html
 !/include/
 !/src/
