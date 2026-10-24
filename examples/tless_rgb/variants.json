@@ -1,0 +1,7 @@
+[
+  {"id":"B0","name":"冻结Ours路径对照","video_verify":false,"visibility":false,"region_control":false},
+  {"id":"B1","name":"视频ORB的PnP-RANSAC一致性验证","video_verify":true,"visibility":false,"region_control":false},
+  {"id":"B2","name":"已有RGB可见性共识与局部颜色记忆","video_verify":false,"visibility":true,"region_control":false},
+  {"id":"B3","name":"几何验证与可见性共识组合","video_verify":true,"visibility":true,"region_control":false},
+  {"id":"B4","name":"仅Region约束对照，保留纹理维护","video_verify":false,"visibility":false,"region_control":true}
+]
